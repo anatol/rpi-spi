@@ -15,6 +15,8 @@ endif()
 
 add_executable(rpi-spi
     main.c
+    serprog.c
+    diag.c
     usb_descriptors.c
 )
 
