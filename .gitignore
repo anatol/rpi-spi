@@ -1,0 +1,7 @@
+build/
+pico-sdk/
+tinyusb/
+*.uf2
+*.elf
+*.bin
+*.map
