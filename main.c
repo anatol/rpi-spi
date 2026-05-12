@@ -312,20 +312,24 @@ static void spi_transfer_write_then_read(uint32_t wlen, uint32_t rlen) {
 
 static void handle_serprog_command(uint8_t cmd) {
     switch (cmd) {
+    /* Keep-alive/probe command used by host to verify link is alive. */
     case S_CMD_NOP:
         cdc_write_u8(S_ACK);
         break;
 
+    /* Report serprog interface version for protocol compatibility checks. */
     case S_CMD_Q_IFACE:
         cdc_write_u8(S_ACK);
         write_le16(SERPROG_IFACE_VERSION);
         break;
 
+    /* Return bitmap of all commands this firmware supports. */
     case S_CMD_Q_CMDMAP:
         cdc_write_u8(S_ACK);
         cdc_write_all(cmdmap, sizeof(cmdmap));
         break;
 
+    /* Return fixed programmer name shown by host tooling. */
     case S_CMD_Q_PGMNAME: {
         const char name[16] = "rpi-spi\0\0\0\0\0\0\0\0\0";
         cdc_write_u8(S_ACK);
@@ -333,36 +337,43 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Report serial RX/TX buffer capacity hint for host chunking. */
     case S_CMD_Q_SERBUF:
         cdc_write_u8(S_ACK);
         write_le16(0xFFFF);
         break;
 
+    /* Advertise supported bus types (SPI only in this firmware). */
     case S_CMD_Q_BUSTYPE:
         cdc_write_u8(S_ACK);
         cdc_write_u8(SUPPORTED_BUSTYPE);
         break;
 
+    /* Report operation-buffer size used by staged O_* commands. */
     case S_CMD_Q_OPBUF:
         cdc_write_u8(S_ACK);
         write_le16((uint16_t)SP_OPBUF_SIZE);
         break;
 
+    /* Report maximum single write length accepted by streaming ops. */
     case S_CMD_Q_WRNMAXLEN:
         cdc_write_u8(S_ACK);
         write_le24(SP_MAX_WRITE_CHUNK);
         break;
 
+    /* Report maximum single read length accepted by streaming ops. */
     case S_CMD_Q_RDNMAXLEN:
         cdc_write_u8(S_ACK);
         write_le24(SP_MAX_READ_CHUNK);
         break;
 
+    /* Resynchronization marker used by host after line/protocol desync. */
     case S_CMD_SYNCNOP:
         cdc_write_u8(S_NAK);
         cdc_write_u8(S_ACK);
         break;
 
+    /* Select active bus type mask requested by the host. */
     case S_CMD_S_BUSTYPE: {
         uint8_t bustype;
         cdc_read_exact(&bustype, 1);
@@ -371,6 +382,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Set SPI clock and return the nearest achievable hardware baudrate. */
     case S_CMD_S_SPI_FREQ: {
         uint32_t requested = read_le32();
         if (requested == 0) {
@@ -385,6 +397,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Enable/disable SPI pin drivers and optional isolate/power controls. */
     case S_CMD_S_PIN_STATE: {
         uint8_t enabled;
         cdc_read_exact(&enabled, 1);
@@ -393,6 +406,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Select chip-select index (only index 0 is implemented). */
     case S_CMD_S_SPI_CS: {
         uint8_t cs_index;
         cdc_read_exact(&cs_index, 1);
@@ -400,6 +414,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Set half-duplex vs full-duplex transfer behavior. */
     case S_CMD_S_SPI_MODE: {
         uint8_t mode;
         cdc_read_exact(&mode, 1);
@@ -412,6 +427,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Set CS handling policy (auto/asserted/deasserted). */
     case S_CMD_S_CS_MODE: {
         uint8_t mode;
         cdc_read_exact(&mode, 1);
@@ -424,6 +440,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Execute immediate SPI write-then-read transaction with explicit lengths. */
     case S_CMD_O_SPIOP: {
         uint32_t wlen = read_le24();
         uint32_t rlen = read_le24();
@@ -431,11 +448,13 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Reset staged operation buffer before appending command bytes. */
     case S_CMD_O_INIT:
         opbuf_len = 0;
         cdc_write_u8(S_ACK);
         break;
 
+    /* Append one byte to staged operation buffer (legacy op API). */
     case S_CMD_O_WRITEB: {
         uint32_t addr = read_le24();
         uint8_t value;
@@ -445,6 +464,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Append multiple bytes to staged operation buffer (legacy op API). */
     case S_CMD_O_WRITEN: {
         uint32_t len = read_le24();
         uint32_t addr = read_le24();
@@ -462,6 +482,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Insert host-requested microsecond delay between staged operations. */
     case S_CMD_O_DELAY: {
         uint32_t usec = read_le32();
         sleep_us(usec);
@@ -469,6 +490,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Execute staged operation buffer as one SPI write burst. */
     case S_CMD_O_EXEC:
         if (!pin_drivers_enabled) {
             opbuf_len = 0;
@@ -488,6 +510,7 @@ static void handle_serprog_command(uint8_t cmd) {
         cdc_write_u8(S_ACK);
         break;
 
+    /* Read one byte from SPI (clocking dummy data on MOSI). */
     case S_CMD_R_BYTE:
         if (!pin_drivers_enabled) {
             cdc_write_u8(S_NAK);
@@ -504,6 +527,7 @@ static void handle_serprog_command(uint8_t cmd) {
         cdc_write_all(io_buf, 1);
         break;
 
+    /* Read N bytes from SPI (clocking dummy data on MOSI). */
     case S_CMD_R_NBYTES: {
         uint32_t len = read_le24();
         if (!pin_drivers_enabled || len > SP_MAX_READ_CHUNK) {
@@ -523,6 +547,7 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
+    /* Unknown command opcode; host receives NAK. */
     default:
         cdc_write_u8(S_NAK);
         break;
