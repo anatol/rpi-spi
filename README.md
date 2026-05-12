@@ -133,6 +133,27 @@ Firmware exposes two USB serial interfaces:
 - `serprog` port: for `flashrom`
 - `diag-console` port: interactive diagnostics
 
+#### Linux: enable non-root USB access (`udev`)
+
+This repo includes [`99-rpi-spi.rules`](99-rpi-spi.rules) for USB VID:PID `2e8a:000a`.
+
+Install it:
+
+```bash
+sudo cp 99-rpi-spi.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+```
+
+Unplug/replug the board after installing the rule.
+
+The rule sets device mode to `0660`, assigns group `dialout`, and adds `uaccess`.
+If needed, add your user to `dialout` and re-login:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
+
 On Linux you can identify ports by symlink name:
 
 ```bash
