@@ -52,7 +52,7 @@ Output files:
 cp build/rpi-spi.uf2 /media/$USER/RPI-RP2/
 ```
 
-After reboot, the board appears as a USB CDC serial device.
+After reboot, the board appears as USB CDC serial devices.
 
 ### 3. Wire SPI
 
@@ -113,6 +113,80 @@ Verify:
 ```bash
 flashrom -p serprog:dev=/dev/ttyACM0,spispeed=12M -v image.bin
 ```
+
+### 5. Use diagnostic console (`screen`)
+
+Firmware exposes two USB serial interfaces:
+
+- `serprog` port: for `flashrom`
+- `diag-console` port: interactive diagnostics
+
+On Linux you can identify ports by symlink name:
+
+```bash
+ls -l /dev/serial/by-id/
+```
+
+Look for entries containing `serprog` and `diag-console`.
+
+Connect to the diagnostic console:
+
+```bash
+screen /dev/ttyACM1 115200
+```
+
+If `ttyACM1` is not the console, try the other enumerated port.
+
+Exit screen:
+
+- `Ctrl-a`, then `k`, then `y`
+
+#### Console commands
+
+- `help`: show command list
+- `status`: show current SPI state and optional control-pin state
+- `check`: run default diagnostic suite
+- `check force`: run extended diagnostics including CS-effect check
+
+#### What `check` verifies
+
+- contention: detects if another domain appears to drive `CS/SCK/MOSI` while this firmware tri-states drivers
+- control pins: validates that `ISOLATE_EN` / `TARGET_PWR` can toggle (if configured)
+- flash detect: JEDEC-ID probe at conservative speed
+- stability: repeated JEDEC reads for flaky connections/noise
+- speed margin: low/mid/high speed probe comparison
+- optional CS-effect (force mode): checks if CS changes target response as expected
+- likely disconnected pin hints with confidence:
+  - `likely_cs_disconnected` (`high`): CS-effect test shows identical behavior regardless of CS state
+  - `likely_miso_disconnected` (`medium`): JEDEC bytes stay stuck at `0xFF`/`0x00`
+  - `likely_clk_mosi_path_issue` (`low`): no JEDEC response plus no observed bus activity
+
+`ISOLATE_EN` and `TARGET_PWR` are optional. If not connected or disabled at build time, diagnostics will skip related checks and continue.
+
+#### Actionable report output
+
+`check` prints a final report with:
+
+- `Overall: PASS | WARN | FAIL`
+- per-check evidence and likely cause
+- confidence tags in likely-cause lines for pin-disconnect inference (`high`/`medium`/`low`)
+- `Recommended Actions` in priority order
+- `Next Validation` steps
+
+Typical recommended actions include:
+
+- lower `flashrom` speed (`spispeed=1M`, then `4M`, then `12M`)
+- reseat clip, shorten wires, improve ground
+- verify target flash power and voltage
+- hold target SoC in reset or add SPI isolation hardware
+- verify CS/SCK/MOSI/MISO mapping
+- continuity-check suspected lines from programmer header to flash pins when a `likely_*_disconnected` finding appears
+
+#### Concurrency behavior
+
+- `flashrom` always owns the `serprog` port.
+- diagnostics run on `diag-console`.
+- diagnostics are intended to run when `flashrom` is not actively performing SPI operations.
 
 ## Speed tuning
 

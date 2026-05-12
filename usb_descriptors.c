@@ -7,15 +7,20 @@
 #define USB_PID 0x000A
 #define USB_BCD 0x0200
 
-#define ITF_NUM_CDC 0
-#define ITF_NUM_CDC_DATA 1
-#define ITF_NUM_TOTAL 2
+#define ITF_NUM_CDC_SERPROG 0
+#define ITF_NUM_CDC_SERPROG_DATA 1
+#define ITF_NUM_CDC_CONSOLE 2
+#define ITF_NUM_CDC_CONSOLE_DATA 3
+#define ITF_NUM_TOTAL 4
 
-#define EPNUM_CDC_NOTIF 0x81
-#define EPNUM_CDC_OUT 0x02
-#define EPNUM_CDC_IN 0x82
+#define EPNUM_CDC_SERPROG_NOTIF 0x81
+#define EPNUM_CDC_SERPROG_OUT 0x02
+#define EPNUM_CDC_SERPROG_IN 0x82
+#define EPNUM_CDC_CONSOLE_NOTIF 0x83
+#define EPNUM_CDC_CONSOLE_OUT 0x04
+#define EPNUM_CDC_CONSOLE_IN 0x84
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + (2 * TUD_CDC_DESC_LEN))
 
 static const tusb_desc_device_t desc_device = {
     .bLength = sizeof(tusb_desc_device_t),
@@ -40,8 +45,12 @@ uint8_t const *tud_descriptor_device_cb(void) {
 
 static const uint8_t desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
-    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT,
-                       EPNUM_CDC_IN, CFG_TUD_CDC_EP_BUFSIZE),
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_SERPROG, 4, EPNUM_CDC_SERPROG_NOTIF, 8,
+                       EPNUM_CDC_SERPROG_OUT, EPNUM_CDC_SERPROG_IN,
+                       CFG_TUD_CDC_EP_BUFSIZE),
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_CONSOLE, 5, EPNUM_CDC_CONSOLE_NOTIF, 8,
+                       EPNUM_CDC_CONSOLE_OUT, EPNUM_CDC_CONSOLE_IN,
+                       CFG_TUD_CDC_EP_BUFSIZE),
 };
 
 uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
@@ -55,6 +64,7 @@ static const char *string_desc_arr[] = {
     "rpi-spi (Anatol Pomozov SPI programmer)",
     NULL,
     "serprog",
+    "diag-console",
 };
 
 static uint16_t _desc_str[32];
