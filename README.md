@@ -10,8 +10,7 @@ This project turns your board into a USB SPI programmer that `flashrom` can talk
 - Hardware SPI backend (`spi0`) for good throughput
 - Configurable SPI speed from host (`S_SPI_FREQ`)
 - Optional safe-disconnect control pins:
-  - `ISOLATE_EN` for external bus switch/buffer
-  - `TARGET_PWR_EN` for target power switch
+  - `FLASH_ACTIVE_EN` for external gating (isolation and/or target power switch)
 - Build helper script that fetches required dependencies
 
 ## Quick start
@@ -67,18 +66,31 @@ Default pinout (`spi0`):
 
 Optional control pins:
 
-- `GPIO20` -> `ISOLATE_EN` (external switch/buffer enable)
-- `GPIO21` -> `TARGET_PWR_EN` (external target VCC switch enable)
+- `GPIO20` -> `FLASH_ACTIVE_EN` (external gating enable)
 
 Targeted use case for these pins:
 
 - In-circuit programming of a flash chip that is still connected to its normal host SoC.
 - Without isolation, the host SoC can keep driving `CS/CLK/MOSI/MISO` (or back-power parts of the board), which causes bus contention, unstable reads/writes, or possible damage.
-- `ISOLATE_EN` is intended to control external analog switches/buffers so the programmer can cleanly connect/disconnect SPI lines.
-- `TARGET_PWR_EN` is intended to control an external load switch so the target flash domain can be power-cycled or held off while isolating.
-- These pins serve different electrical roles: `ISOLATE_EN` controls SPI signal path isolation, while `TARGET_PWR_EN` controls target VCC power gating.
-- Current firmware behavior ties both to `S_PIN_STATE` (enabled together when `S_PIN_STATE=1`, disabled together when `S_PIN_STATE=0`).
-- Together, they let you keep a clip attached while switching between "safe disconnected" and "active programming" states.
+- `FLASH_ACTIVE_EN` can drive one external control path that enables your isolation and/or target-power switch chain.
+- Current firmware behavior ties `FLASH_ACTIVE_EN` to `S_PIN_STATE`:
+  - `S_PIN_STATE=1` -> `FLASH_ACTIVE_EN` asserted
+  - `S_PIN_STATE=0` -> `FLASH_ACTIVE_EN` deasserted
+- Default behavior is inactive at boot (use a pull-down so it stays low until firmware explicitly asserts it).
+
+How to use `FLASH_ACTIVE_EN` in hardware:
+
+- Target-power gating:
+  - Connect `FLASH_ACTIVE_EN` to the `EN` pin of a load switch/regulator feeding flash `VCC`.
+  - `FLASH_ACTIVE_EN=0`: target flash power path off (safe idle/disconnected state).
+  - `FLASH_ACTIVE_EN=1`: target flash power path on for read/write/verify operations.
+- SPI-line isolation:
+  - Connect `FLASH_ACTIVE_EN` to the `OE/EN` of analog switches or bus buffers inserted in `CS/SCK/MOSI/MISO`.
+  - `FLASH_ACTIVE_EN=0`: SPI path open/high-Z between programmer and target host domain.
+  - `FLASH_ACTIVE_EN=1`: SPI path connected so programmer can access the flash.
+- Combined use:
+  - You can fan out `FLASH_ACTIVE_EN` to both power-gating and SPI-isolation control inputs (if voltage domains are compatible).
+  - This gives one control state for "programming active" and one for "electrically isolated/safe idle".
 
 Important:
 
@@ -151,7 +163,7 @@ Exit screen:
 #### What `check` verifies
 
 - contention: detects if another domain appears to drive `CS/SCK/MOSI` while this firmware tri-states drivers
-- control pins: validates that `ISOLATE_EN` / `TARGET_PWR` can toggle (if configured)
+- control pins: validates that `FLASH_ACTIVE_EN` can toggle (if configured)
 - flash detect: JEDEC-ID probe at conservative speed
 - stability: repeated JEDEC reads for flaky connections/noise
 - speed margin: low/mid/high speed probe comparison
@@ -161,7 +173,7 @@ Exit screen:
   - `likely_miso_disconnected` (`medium`): JEDEC bytes stay stuck at `0xFF`/`0x00`
   - `likely_clk_mosi_path_issue` (`low`): no JEDEC response plus no observed bus activity
 
-`ISOLATE_EN` and `TARGET_PWR` are optional. If not connected or disabled at build time, diagnostics will skip related checks and continue.
+`FLASH_ACTIVE_EN` is optional. If not connected or disabled at build time, diagnostics will skip related checks and continue.
 
 #### Actionable report output
 
@@ -206,10 +218,10 @@ Note: firmware returns the nearest supported SPI clock to host requests.
 
 ## Safer in-circuit workflow
 
-If your hardware includes isolation and/or target power control tied to `GPIO20/21`:
+If your hardware includes isolation and/or target power control tied to `GPIO20`:
 
-- `S_PIN_STATE = 1`: SPI drivers active, optional isolate/power enabled
-- `S_PIN_STATE = 0`: SPI pins tri-stated, CS released, optional isolate/power disabled
+- `S_PIN_STATE = 1`: SPI drivers active, `FLASH_ACTIVE_EN` asserted
+- `S_PIN_STATE = 0`: SPI pins tri-stated, CS released, `FLASH_ACTIVE_EN` deasserted
 
 This allows keeping clips connected while electrically disconnecting the programmer side.
 
@@ -221,17 +233,15 @@ You can override defaults at build time:
 cmake -S . -B build \
   -DPICO_SDK_PATH=$PWD/pico-sdk \
   -DPICO_TINYUSB_PATH=$PWD/tinyusb \
-  -DCMAKE_C_FLAGS='-DSP_PIN_CS=5 -DSP_PIN_SCK=6 -DSP_PIN_MOSI=7 -DSP_PIN_MISO=4 -DSP_PIN_ISOLATE_EN=10 -DSP_PIN_TARGET_PWR=11'
+  -DCMAKE_C_FLAGS='-DSP_PIN_CS=5 -DSP_PIN_SCK=6 -DSP_PIN_MOSI=7 -DSP_PIN_MISO=4 -DSP_PIN_FLASH_ACTIVE_EN=10'
 cmake --build build -j"$(nproc)"
 ```
 
 Useful flags:
 
 - `SP_DEFAULT_SPI_HZ` (default startup SPI speed)
-- `SP_PIN_ISOLATE_EN=-1` to disable isolate pin feature
-- `SP_PIN_TARGET_PWR=-1` to disable target power pin feature
-- `SP_PIN_ISOLATE_EN_ACTIVE_HIGH=0|1`
-- `SP_PIN_TARGET_PWR_ACTIVE_HIGH=0|1`
+- `SP_PIN_FLASH_ACTIVE_EN=-1` to disable flash-active pin feature
+- `SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH=0|1`
 
 ## USB enumeration compatibility option
 

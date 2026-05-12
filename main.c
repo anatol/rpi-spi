@@ -33,22 +33,15 @@
 #endif
 
 /*
- * Optional GPIO that controls an external analog switch/transceiver enable.
+ * Optional flash-active control pin for external gating (isolation and/or power).
+ * This pin is kept inactive by default and follows S_PIN_STATE.
  * Set to -1 to disable this feature.
  */
-#ifndef SP_PIN_ISOLATE_EN
-#define SP_PIN_ISOLATE_EN 20
+#ifndef SP_PIN_FLASH_ACTIVE_EN
+#define SP_PIN_FLASH_ACTIVE_EN 20
 #endif
-#ifndef SP_PIN_ISOLATE_EN_ACTIVE_HIGH
-#define SP_PIN_ISOLATE_EN_ACTIVE_HIGH 1
-#endif
-
-/* Optional target power control pin (e.g. controlling load switch EN). */
-#ifndef SP_PIN_TARGET_PWR
-#define SP_PIN_TARGET_PWR 21
-#endif
-#ifndef SP_PIN_TARGET_PWR_ACTIVE_HIGH
-#define SP_PIN_TARGET_PWR_ACTIVE_HIGH 1
+#ifndef SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH
+#define SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH 1
 #endif
 
 #ifndef SP_DEFAULT_SPI_HZ
@@ -235,11 +228,12 @@ static int optional_pin_level(int pin) {
     return gpio_get((uint)pin) ? 1 : 0;
 }
 
-/*
- * S_PIN_STATE hooks both firmware-level tri-state handling and optional external
- * electrical isolation/power gating pins so the programmer can be disconnected
- * from the target without unplugging headers.
- */
+static void set_flash_active_pin(bool active) {
+    set_optional_pin_level(SP_PIN_FLASH_ACTIVE_EN, active,
+                           SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH != 0);
+}
+
+/* S_PIN_STATE controls SPI pin tri-state handling in firmware. */
 static void set_pin_drivers(bool enabled) {
     pin_drivers_enabled = enabled;
 
@@ -257,10 +251,6 @@ static void set_pin_drivers(bool enabled) {
         cs_deassert();
     }
 
-    set_optional_pin_level(SP_PIN_ISOLATE_EN, enabled,
-                           SP_PIN_ISOLATE_EN_ACTIVE_HIGH != 0);
-    set_optional_pin_level(SP_PIN_TARGET_PWR, enabled,
-                           SP_PIN_TARGET_PWR_ACTIVE_HIGH != 0);
 }
 
 static uint32_t spi_set_speed(uint32_t req_hz) {
@@ -412,33 +402,32 @@ static void run_diagnostics(diag_report_t *r) {
                    "none");
     }
 
-    if (pin_is_valid(SP_PIN_ISOLATE_EN) || pin_is_valid(SP_PIN_TARGET_PWR)) {
-        int before_iso = optional_pin_level(SP_PIN_ISOLATE_EN);
-        int before_pwr = optional_pin_level(SP_PIN_TARGET_PWR);
-        set_optional_pin_level(SP_PIN_ISOLATE_EN, false, SP_PIN_ISOLATE_EN_ACTIVE_HIGH != 0);
-        set_optional_pin_level(SP_PIN_TARGET_PWR, false, SP_PIN_TARGET_PWR_ACTIVE_HIGH != 0);
+    if (pin_is_valid(SP_PIN_FLASH_ACTIVE_EN)) {
+        int before = optional_pin_level(SP_PIN_FLASH_ACTIVE_EN);
+        set_flash_active_pin(false);
         sleep_ms(20);
-        set_optional_pin_level(SP_PIN_ISOLATE_EN, true, SP_PIN_ISOLATE_EN_ACTIVE_HIGH != 0);
-        set_optional_pin_level(SP_PIN_TARGET_PWR, true, SP_PIN_TARGET_PWR_ACTIVE_HIGH != 0);
+        set_flash_active_pin(true);
         sleep_ms(20);
-        int after_iso = optional_pin_level(SP_PIN_ISOLATE_EN);
-        int after_pwr = optional_pin_level(SP_PIN_TARGET_PWR);
+        int after = optional_pin_level(SP_PIN_FLASH_ACTIVE_EN);
 
-        if ((before_iso == -1 || after_iso == before_iso) &&
-            (before_pwr == -1 || after_pwr == before_pwr)) {
+        if (before == -1 || after == before) {
             report_add(r, "control_pins", CHECK_WARN,
-                       "control pin levels unchanged after toggle sequence",
-                       "isolate/power controls may be unconnected or not wired to expected path",
-                       "verify GPIO20/GPIO21 wiring or build with SP_PIN_ISOLATE_EN=-1 / SP_PIN_TARGET_PWR=-1");
+                       "FLASH_ACTIVE_EN level unchanged after toggle sequence",
+                       "flash-active control may be unconnected or not wired to expected path",
+                       "verify GPIO20 wiring or build with SP_PIN_FLASH_ACTIVE_EN=-1");
         } else {
             report_add(r, "control_pins", CHECK_PASS,
-                       "isolate/power control pins changed level during cycle",
+                       "FLASH_ACTIVE_EN changed level during cycle",
                        "control path appears electrically present",
                        "none");
         }
+        if (before != -1) {
+            bool before_active = (before == ((SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH != 0) ? 1 : 0));
+            set_flash_active_pin(before_active);
+        }
     } else {
         report_add(r, "control_pins", CHECK_PASS,
-                   "ISOLATE_EN and TARGET_PWR not configured",
+                   "FLASH_ACTIVE_EN not configured",
                    "optional control path intentionally unavailable",
                    "none");
     }
@@ -755,11 +744,13 @@ static void handle_serprog_command(uint8_t cmd) {
         break;
     }
 
-    /* Enable/disable SPI pin drivers and optional isolate/power controls. */
+    /* Enable/disable SPI pin drivers and flash-active gating control. */
     case S_CMD_S_PIN_STATE: {
         uint8_t enabled;
         cdc_read_exact_itf(CDC_SERPROG_ITF, &enabled, 1);
-        set_pin_drivers(enabled != 0);
+        bool state = (enabled != 0);
+        set_pin_drivers(state);
+        set_flash_active_pin(state);
         cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
         break;
     }
@@ -932,15 +923,10 @@ static void console_print_status(void) {
                    cs_mode == CS_MODE_AUTO
                        ? "auto"
                        : (cs_mode == CS_MODE_SELECTED ? "selected" : "deselected"));
-    if (pin_is_valid(SP_PIN_ISOLATE_EN)) {
-        console_printf("isolate_en_level=%d\r\n", optional_pin_level(SP_PIN_ISOLATE_EN));
+    if (pin_is_valid(SP_PIN_FLASH_ACTIVE_EN)) {
+        console_printf("flash_active_en_level=%d\r\n", optional_pin_level(SP_PIN_FLASH_ACTIVE_EN));
     } else {
-        console_printf("isolate_en=not-configured\r\n");
-    }
-    if (pin_is_valid(SP_PIN_TARGET_PWR)) {
-        console_printf("target_pwr_level=%d\r\n", optional_pin_level(SP_PIN_TARGET_PWR));
-    } else {
-        console_printf("target_pwr=not-configured\r\n");
+        console_printf("flash_active_en=not-configured\r\n");
     }
 }
 
@@ -1029,15 +1015,12 @@ static void init_gpio_and_spi(void) {
     gpio_set_dir(SP_PIN_CS, GPIO_OUT);
     cs_deassert();
 
-    if (pin_is_valid(SP_PIN_ISOLATE_EN)) {
-        gpio_init((uint)SP_PIN_ISOLATE_EN);
-        gpio_set_dir((uint)SP_PIN_ISOLATE_EN, GPIO_OUT);
-    }
-    if (pin_is_valid(SP_PIN_TARGET_PWR)) {
-        gpio_init((uint)SP_PIN_TARGET_PWR);
-        gpio_set_dir((uint)SP_PIN_TARGET_PWR, GPIO_OUT);
+    if (pin_is_valid(SP_PIN_FLASH_ACTIVE_EN)) {
+        gpio_init((uint)SP_PIN_FLASH_ACTIVE_EN);
+        gpio_set_dir((uint)SP_PIN_FLASH_ACTIVE_EN, GPIO_OUT);
     }
 
+    set_flash_active_pin(false);
     set_pin_drivers(true);
     spi_set_speed(SP_DEFAULT_SPI_HZ);
 }
