@@ -11,6 +11,8 @@ bool pin_drivers_enabled = true;
 cs_mode_t cs_mode = CS_MODE_AUTO;
 spi_mode_t spi_mode = SPI_MODE_HALF_DUPLEX;
 uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
+// True while a serprog command is actively executing.
+// Diagnostic console checks this to avoid bus ownership races.
 bool serprog_active = false;
 
 void tinyusb_poll(void) { tud_task(); }
@@ -43,12 +45,15 @@ void set_pin_drivers(bool enabled) {
     pin_drivers_enabled = enabled;
 
     if (!enabled) {
+        // Put bus pins in a high-impedance/safe state so an external host
+        // can drive the target without fighting this MCU.
         cs_deassert();
         gpio_set_function(SP_PIN_MISO, GPIO_FUNC_NULL);
         gpio_set_function(SP_PIN_MOSI, GPIO_FUNC_NULL);
         gpio_set_function(SP_PIN_SCK, GPIO_FUNC_NULL);
         gpio_set_dir(SP_PIN_CS, GPIO_IN);
     } else {
+        // Restore SPI pinmux and actively drive CS again.
         gpio_set_function(SP_PIN_MISO, GPIO_FUNC_SPI);
         gpio_set_function(SP_PIN_MOSI, GPIO_FUNC_SPI);
         gpio_set_function(SP_PIN_SCK, GPIO_FUNC_SPI);
@@ -69,6 +74,7 @@ uint32_t spi_set_speed(uint32_t req_hz) {
 void apply_cs_mode(cs_mode_t mode) {
     cs_mode = mode;
     if (!pin_drivers_enabled) {
+        // Defer physical CS manipulation until drivers are re-enabled.
         return;
     }
     if (mode == CS_MODE_SELECTED) {
@@ -81,6 +87,8 @@ void apply_cs_mode(cs_mode_t mode) {
 static void usb_wait_for_host(void) {
     while (true) {
         tinyusb_poll();
+        // Proceed when either CDC interface is opened by a host.
+        // This prevents printing startup text before a terminal attaches.
         if (tud_cdc_n_connected(CDC_SERPROG_ITF) || tud_cdc_n_connected(CDC_CONSOLE_ITF)) {
             return;
         }
@@ -88,6 +96,7 @@ static void usb_wait_for_host(void) {
 }
 
 static void init_gpio_and_spi(void) {
+    // Default SPI framing expected by most SPI NOR flash parts.
     spi_init(SP_SPI_PORT, SP_DEFAULT_SPI_HZ);
     spi_set_format(SP_SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
@@ -119,6 +128,7 @@ int main(void) {
     while (true) {
         tinyusb_poll();
 
+        // Serprog endpoint takes raw binary commands (flashrom protocol).
         if (tud_cdc_n_available(CDC_SERPROG_ITF)) {
             uint8_t cmd;
             if (tud_cdc_n_read(CDC_SERPROG_ITF, &cmd, 1) == 1) {
@@ -126,6 +136,7 @@ int main(void) {
             }
         }
 
+        // Console endpoint accepts line-oriented human commands.
         console_poll();
     }
 }

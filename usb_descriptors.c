@@ -7,6 +7,9 @@
 #define USB_PID 0x000A
 #define USB_BCD 0x0200
 
+// Two CDC functions are exposed:
+// 1) serprog binary transport
+// 2) human-readable diagnostic console
 #define ITF_NUM_CDC_SERPROG 0
 #define ITF_NUM_CDC_SERPROG_DATA 1
 #define ITF_NUM_CDC_CONSOLE 2
@@ -44,6 +47,8 @@ uint8_t const *tud_descriptor_device_cb(void) {
 }
 
 static const uint8_t desc_configuration[] = {
+    // bmAttributes=0x00 keeps descriptor minimal; bus-powered behavior is
+    // implied for this device class in TinyUSB examples.
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_SERPROG, 4, EPNUM_CDC_SERPROG_NOTIF, 8,
                        EPNUM_CDC_SERPROG_OUT, EPNUM_CDC_SERPROG_IN,
@@ -62,7 +67,7 @@ static const char *string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "rpi-spi",
     "rpi-spi (Anatol Pomozov SPI programmer)",
-    NULL,
+    NULL, // iSerialNumber is generated dynamically from unique board ID.
     "serprog",
     "diag-console",
 };
@@ -81,6 +86,7 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
             return NULL;
         }
         if (index == 3) {
+            // Convert binary board ID into uppercase hex USB serial string.
             static char serial[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
             pico_unique_board_id_t id;
             pico_get_unique_board_id(&id);

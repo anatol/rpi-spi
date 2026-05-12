@@ -62,17 +62,23 @@
 #endif
 
 #define SERPROG_IFACE_VERSION 0x0001u
+// USB CDC interface index assignments (must match usb_descriptors.c ordering).
 #define CDC_SERPROG_ITF 0u
 #define CDC_CONSOLE_ITF 1u
 
 typedef enum {
+    // Write then read phases are separated.
     SPI_MODE_HALF_DUPLEX = 0,
+    // Simultaneous write/read allowed where commands use it.
     SPI_MODE_FULL_DUPLEX = 1,
 } spi_mode_t;
 
 typedef enum {
+    // Automatically assert/deassert CS around each command transaction.
     CS_MODE_AUTO = 0,
+    // Keep CS asserted across commands until mode changes.
     CS_MODE_SELECTED = 1,
+    // Keep CS deasserted regardless of command activity.
     CS_MODE_DESELECTED = 2,
 } cs_mode_t;
 

@@ -33,7 +33,9 @@ typedef struct {
 
 typedef struct {
     diag_check_t checks[10];
+    // Number of populated entries in checks[].
     uint8_t count;
+    // Enables additional intrusive checks (currently CS-effect test).
     bool force;
 } diag_report_t;
 
@@ -74,6 +76,7 @@ static void console_printf(const char *fmt, ...) {
 }
 
 static bool spi_jedec_id(uint32_t speed_hz, uint8_t out_id[3]) {
+    // JEDEC RDID opcode for SPI NOR flash.
     uint8_t cmd = 0x9Fu;
     uint8_t in[3] = {0, 0, 0};
     if (!pin_drivers_enabled) {
@@ -85,6 +88,8 @@ static bool spi_jedec_id(uint32_t speed_hz, uint8_t out_id[3]) {
         return false;
     }
 
+    // Direct transfer here intentionally bypasses serprog wrappers because
+    // diagnostics own the bus synchronously while serprog is idle.
     cs_assert();
     spi_write_blocking(SP_SPI_PORT, &cmd, 1);
     spi_read_blocking(SP_SPI_PORT, 0x00, in, 3);
@@ -106,6 +111,7 @@ static bool id_all_value(const uint8_t id[3], uint8_t v) {
 static bool sample_pin_toggling(uint pin, uint32_t ms) {
     uint32_t start = to_ms_since_boot(get_absolute_time());
     bool first = gpio_get(pin);
+    // Detect any edge transition during the sample window.
     while ((to_ms_since_boot(get_absolute_time()) - start) < ms) {
         bool cur = gpio_get(pin);
         if (cur != first) {
@@ -130,6 +136,7 @@ static void report_add(diag_report_t *r, const char *name, check_result_t result
 }
 
 static void run_diagnostics(diag_report_t *r) {
+    // Save and restore runtime state so diagnostics are non-destructive.
     bool saved_pin_drivers = pin_drivers_enabled;
     cs_mode_t saved_cs_mode = cs_mode;
     uint32_t saved_hz = spi_hz_current;
@@ -139,6 +146,8 @@ static void run_diagnostics(diag_report_t *r) {
     bool cs_toggle = false;
 
     set_pin_drivers(false);
+    // Pull-ups provide a deterministic idle bias while watching for
+    // unexpected external activity (possible bus contention).
     gpio_pull_up(SP_PIN_SCK);
     gpio_pull_up(SP_PIN_MOSI);
     gpio_pull_up(SP_PIN_CS);
@@ -200,6 +209,7 @@ static void run_diagnostics(diag_report_t *r) {
     bool cs_same_in_force = false;
 
     for (uint32_t s = 0; s < 3; s++) {
+        // Probe across low/mid/high speed to classify margin issues.
         bool speed_ok = true;
         bool have_ref_this_speed = false;
         uint8_t ref[3] = {0};
@@ -221,6 +231,7 @@ static void run_diagnostics(diag_report_t *r) {
         }
 
         if (!have_ref_this_speed || id_all_value(ref, 0x00) || id_all_value(ref, 0xFF)) {
+            // All-0x00/0xFF is considered invalid ID capture.
             speed_ok = false;
         }
 
@@ -267,6 +278,7 @@ static void run_diagnostics(diag_report_t *r) {
     }
 
     if (r->force) {
+        // Optional A/B test: compare responses with CS auto vs forced deselect.
         uint8_t with_cs[3] = {0};
         uint8_t without_cs[3] = {0};
         bool ok_with = spi_jedec_id(SP_DIAG_SPEED_LOW_HZ, with_cs);
@@ -425,6 +437,7 @@ static void console_print_status(void) {
 }
 
 static void handle_console_line(char *line) {
+    // Trim only leading spaces; commands are intentionally simple.
     while (*line == ' ') {
         line++;
     }
@@ -454,6 +467,7 @@ static void handle_console_line(char *line) {
 
     if (strcmp(line, "check") == 0 || strcmp(line, "check force") == 0) {
         if (serprog_active) {
+            // Avoid concurrent access to SPI from serprog and diagnostics.
             console_printf("SPI is currently used by serprog/flashrom; retry after current transaction finishes.\r\n");
             console_print_prompt();
             return;
@@ -480,6 +494,7 @@ void console_poll(void) {
             return;
         }
         if (ch == '\r' || ch == '\n') {
+            // CR/LF commits the current line.
             if (console_line_len > 0) {
                 console_line[console_line_len] = '\0';
                 handle_console_line(console_line);
@@ -489,6 +504,7 @@ void console_poll(void) {
             }
             continue;
         }
+        // Keep input ASCII-printable only.
         if ((uint8_t)ch < 32u || (uint8_t)ch > 126u) {
             continue;
         }
