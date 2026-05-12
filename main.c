@@ -9,6 +9,7 @@
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
 #include "pico/time.h"
+#include "pico/unique_id.h"
 #include "serprog.h"
 #include "tusb.h"
 
@@ -73,6 +74,10 @@
 #define SP_DIAG_SPEED_HIGH_HZ 12000000u
 #endif
 
+#ifndef SP_FW_VERSION
+#define SP_FW_VERSION "dev"
+#endif
+
 #define SERPROG_IFACE_VERSION 0x0001u
 #define SUPPORTED_BUSTYPE S_BUS_SPI
 
@@ -125,6 +130,13 @@ static bool serprog_active = false;
 
 static char console_line[96];
 static uint8_t console_line_len = 0;
+
+#define SP_STR_INNER(x) #x
+#define SP_STR(x) SP_STR_INNER(x)
+
+#ifndef PICO_BOARD
+#define PICO_BOARD unknown
+#endif
 
 static inline void tinyusb_poll(void) { tud_task(); }
 
@@ -909,9 +921,46 @@ static void console_print_prompt(void) { console_printf("diag> "); }
 static void console_print_help(void) {
     console_printf("Commands:\r\n");
     console_printf("  help        - show this help\r\n");
+    console_printf("  info        - show firmware/build/board info\r\n");
     console_printf("  status      - show SPI/lock/status\r\n");
     console_printf("  check       - run diagnostics\r\n");
     console_printf("  check force - run diagnostics with extra CS-effect check\r\n");
+}
+
+static void console_print_info(void) {
+    pico_unique_board_id_t id;
+    char id_hex[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
+    pico_get_unique_board_id(&id);
+    for (size_t i = 0; i < PICO_UNIQUE_BOARD_ID_SIZE_BYTES; i++) {
+        static const char hex[] = "0123456789abcdef";
+        id_hex[2 * i] = hex[(id.id[i] >> 4) & 0x0Fu];
+        id_hex[2 * i + 1] = hex[id.id[i] & 0x0Fu];
+    }
+    id_hex[sizeof(id_hex) - 1] = '\0';
+
+    console_printf("firmware_version=%s\r\n", SP_FW_VERSION);
+    console_printf("build_date=%s\r\n", __DATE__);
+    console_printf("build_time=%s\r\n", __TIME__);
+    console_printf("board=%s\r\n", SP_STR(PICO_BOARD));
+#if defined(PICO_RP2350)
+    console_printf("mcu=RP2350\r\n");
+#elif defined(PICO_RP2040)
+    console_printf("mcu=RP2040\r\n");
+#else
+    console_printf("mcu=unknown\r\n");
+#endif
+    console_printf("board_id=%s\r\n", id_hex);
+    console_printf("serprog_iface_version=0x%04x\r\n", SERPROG_IFACE_VERSION);
+    console_printf("default_spi_hz=%u\r\n", SP_DEFAULT_SPI_HZ);
+    console_printf("spi_pins cs=%d sck=%d mosi=%d miso=%d\r\n", SP_PIN_CS, SP_PIN_SCK, SP_PIN_MOSI,
+                   SP_PIN_MISO);
+    if (pin_is_valid(SP_PIN_FLASH_ACTIVE_EN)) {
+        console_printf("flash_active_en_pin=%d\r\n", SP_PIN_FLASH_ACTIVE_EN);
+        console_printf("flash_active_en_active=%s\r\n",
+                       SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH ? "high" : "low");
+    } else {
+        console_printf("flash_active_en_pin=disabled\r\n");
+    }
 }
 
 static void console_print_status(void) {
@@ -948,6 +997,12 @@ static void handle_console_line(char *line) {
 
     if (strcmp(line, "status") == 0) {
         console_print_status();
+        console_print_prompt();
+        return;
+    }
+
+    if (strcmp(line, "info") == 0) {
+        console_print_info();
         console_print_prompt();
         return;
     }

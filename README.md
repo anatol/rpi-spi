@@ -177,6 +177,7 @@ Exit screen:
 #### Console commands
 
 - `help`: show command list
+- `info`: show firmware/build/board identifiers and configured pin map
 - `status`: show current SPI state and optional control-pin state
 - `check`: run default diagnostic suite
 - `check force`: run extended diagnostics including CS-effect check
