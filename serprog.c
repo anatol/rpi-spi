@@ -21,6 +21,16 @@ static uint32_t opbuf_len;
 static uint8_t io_buf[SP_MAX_WRITE_CHUNK > SP_MAX_READ_CHUNK ? SP_MAX_WRITE_CHUNK
                                                               : SP_MAX_READ_CHUNK];
 
+static bool cdc_read_exact_itf(uint8_t itf, void *dst, uint32_t len);
+
+static void cdc_drain_bytes_itf(uint8_t itf, uint32_t len) {
+    while (len > 0) {
+        uint8_t sink;
+        cdc_read_exact_itf(itf, &sink, 1);
+        --len;
+    }
+}
+
 static void cdc_write_all_itf(uint8_t itf, const void *data, uint32_t len) {
     const uint8_t *p = (const uint8_t *)data;
     while (len > 0) {
@@ -139,10 +149,7 @@ static void spi_transfer_write_then_read(uint32_t wlen, uint32_t rlen) {
     if (wlen > SP_MAX_WRITE_CHUNK || rlen > SP_MAX_READ_CHUNK) {
         cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
         // Consume incoming write payload to keep command stream aligned.
-        for (uint32_t i = 0; i < wlen; i++) {
-            uint8_t sink;
-            cdc_read_exact_itf(CDC_SERPROG_ITF, &sink, 1);
-        }
+        cdc_drain_bytes_itf(CDC_SERPROG_ITF, wlen);
         return;
     }
 
@@ -336,10 +343,7 @@ void handle_serprog_command(uint8_t cmd) {
         (void)addr;
         if (len > SP_MAX_WRITE_CHUNK || len > (SP_OPBUF_SIZE - opbuf_len)) {
             // Drain payload even on reject so the next command starts on byte boundary.
-            for (uint32_t i = 0; i < len; i++) {
-                uint8_t sink;
-                cdc_read_exact_itf(CDC_SERPROG_ITF, &sink, 1);
-            }
+            cdc_drain_bytes_itf(CDC_SERPROG_ITF, len);
             cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
             break;
         }
