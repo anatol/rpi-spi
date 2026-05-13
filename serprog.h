@@ -1,5 +1,4 @@
-#ifndef SERPROG_H
-#define SERPROG_H
+#pragma once
 
 /* serprog return codes */
 #define S_ACK 0x06
@@ -37,5 +36,3 @@
 #define S_BUS_LPC      (1u << 1)
 #define S_BUS_FWH      (1u << 2)
 #define S_BUS_SPI      (1u << 3)
-
-#endif
