@@ -66,7 +66,7 @@ uint8_t const *tud_descriptor_configuration_cb(uint8_t index) {
 static const char *string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "rpi-spi",
-    "rpi-spi (Anatol Pomozov SPI programmer)",
+    "Anatol Pomozov SPI programmer",
     NULL, // iSerialNumber is generated dynamically from unique board ID.
     "serprog",
     "diag-console",
