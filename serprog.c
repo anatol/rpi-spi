@@ -24,10 +24,11 @@ static uint8_t io_buf[SP_MAX_WRITE_CHUNK > SP_MAX_READ_CHUNK ? SP_MAX_WRITE_CHUN
 static bool cdc_read_exact_itf(uint8_t itf, void *dst, uint32_t len);
 
 static void cdc_drain_bytes_itf(uint8_t itf, uint32_t len) {
+    uint8_t sink[64];
     while (len > 0) {
-        uint8_t sink;
-        cdc_read_exact_itf(itf, &sink, 1);
-        --len;
+        uint32_t chunk = len < sizeof(sink) ? len : (uint32_t)sizeof(sink);
+        cdc_read_exact_itf(itf, sink, chunk);
+        len -= chunk;
     }
 }
 
@@ -42,10 +43,11 @@ static void cdc_write_all_itf(uint8_t itf, const void *data, uint32_t len) {
         }
         uint32_t chunk = len < space ? len : space;
         uint32_t wr = tud_cdc_n_write(itf, p, chunk);
-        tud_cdc_n_write_flush(itf);
         p += wr;
         len -= wr;
     }
+    // Force submission once per logical payload to avoid per-packet flush overhead.
+    tud_cdc_n_write_flush(itf);
 }
 
 static void cdc_write_u8_itf(uint8_t itf, uint8_t v) { cdc_write_all_itf(itf, &v, 1); }
@@ -185,7 +187,6 @@ static void spi_transfer_write_then_read(uint32_t wlen, uint32_t rlen) {
     while (rlen > 0) {
         // Read remaining bytes in bounded chunks.
         uint32_t chunk = (rlen < SP_MAX_READ_CHUNK) ? rlen : SP_MAX_READ_CHUNK;
-        memset(io_buf, 0, chunk);
         spi_read_blocking(SP_SPI_PORT, 0x00, io_buf, chunk);
         cdc_write_all_itf(CDC_SERPROG_ITF, io_buf, chunk);
         rlen -= chunk;
@@ -409,7 +410,6 @@ void handle_serprog_command(uint8_t cmd) {
         if (cs_mode == CS_MODE_AUTO) {
             cs_assert();
         }
-        memset(io_buf, 0, len);
         spi_read_blocking(SP_SPI_PORT, 0x00, io_buf, len);
         if (cs_mode == CS_MODE_AUTO) {
             cs_deassert();

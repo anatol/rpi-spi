@@ -32,10 +32,10 @@
 #define SP_DEFAULT_SPI_HZ 12000000u
 #endif
 #ifndef SP_MAX_READ_CHUNK
-#define SP_MAX_READ_CHUNK 4096u
+#define SP_MAX_READ_CHUNK 16384u
 #endif
 #ifndef SP_MAX_WRITE_CHUNK
-#define SP_MAX_WRITE_CHUNK 4096u
+#define SP_MAX_WRITE_CHUNK 16384u
 #endif
 #ifndef SP_OPBUF_SIZE
 #define SP_OPBUF_SIZE 8192u
