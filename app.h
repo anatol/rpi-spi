@@ -6,16 +6,16 @@
 #include "hardware/spi.h"
 
 #ifndef SP_PIN_MISO
-#define SP_PIN_MISO 16
+#define SP_PIN_MISO 0
 #endif
 #ifndef SP_PIN_CS
-#define SP_PIN_CS 17
+#define SP_PIN_CS 1
 #endif
 #ifndef SP_PIN_SCK
-#define SP_PIN_SCK 18
+#define SP_PIN_SCK 2
 #endif
 #ifndef SP_PIN_MOSI
-#define SP_PIN_MOSI 19
+#define SP_PIN_MOSI 3
 #endif
 #ifndef SP_SPI_PORT
 #define SP_SPI_PORT spi0

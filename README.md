@@ -57,10 +57,10 @@ After reboot, the board appears as USB CDC serial devices.
 
 Default pinout (`spi0`):
 
-- `GPIO17` -> flash `CS#`
-- `GPIO18` -> flash `CLK`
-- `GPIO19` -> flash `DI / MOSI`
-- `GPIO16` -> flash `DO / MISO`
+- `GPIO1` -> flash `CS#`
+- `GPIO2` -> flash `CLK`
+- `GPIO3` -> flash `DI / MOSI`
+- `GPIO0` -> flash `DO / MISO`
 - `3V3` (or external regulator output) -> flash `VCC`
 - `GND` -> target `GND`
 
