@@ -4,6 +4,7 @@
 #include "app.h"
 #include "bsp/board_api.h"
 #include "hardware/gpio.h"
+#include "hardware/uart.h"
 #include "pico/stdlib.h"
 #include "tusb.h"
 
@@ -14,6 +15,7 @@ uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
 // True while a serprog command is actively executing.
 // Diagnostic console checks this to avoid bus ownership races.
 bool serprog_active = false;
+static uint32_t uart_baud_current = SP_DEFAULT_UART_BAUD;
 
 void tinyusb_poll(void) { tud_task(); }
 
@@ -71,6 +73,59 @@ uint32_t spi_set_speed(uint32_t req_hz) {
     return actual;
 }
 
+void uart_bridge_set_baudrate(uint32_t baud) {
+    if (baud == 0) {
+        return;
+    }
+    uart_baud_current = uart_init(SP_UART_PORT, baud);
+}
+
+uint32_t uart_bridge_get_baudrate(void) { return uart_baud_current; }
+
+void uart_bridge_init(void) {
+    if (!pin_is_valid(SP_PIN_UART_TX) || !pin_is_valid(SP_PIN_UART_RX) ||
+        SP_PIN_UART_TX == SP_PIN_UART_RX) {
+        return;
+    }
+    gpio_set_function(SP_PIN_UART_TX, GPIO_FUNC_UART);
+    gpio_set_function(SP_PIN_UART_RX, GPIO_FUNC_UART);
+    uart_bridge_set_baudrate(SP_DEFAULT_UART_BAUD);
+    uart_set_hw_flow(SP_UART_PORT, false, false);
+    uart_set_format(SP_UART_PORT, 8, 1, UART_PARITY_NONE);
+    uart_set_fifo_enabled(SP_UART_PORT, true);
+}
+
+void uart_bridge_poll(void) {
+    if (!pin_is_valid(SP_PIN_UART_TX) || !pin_is_valid(SP_PIN_UART_RX) ||
+        SP_PIN_UART_TX == SP_PIN_UART_RX) {
+        return;
+    }
+
+    if (tud_cdc_n_available(CDC_UART_ITF) > 0) {
+        uint8_t buf[64];
+        uint32_t n = tud_cdc_n_read(CDC_UART_ITF, buf, sizeof(buf));
+        if (n > 0) {
+            uart_write_blocking(SP_UART_PORT, buf, n);
+        }
+    }
+
+    if (tud_cdc_n_connected(CDC_UART_ITF)) {
+        uint8_t out[64];
+        uint32_t n = 0;
+        uint32_t max_n = (uint32_t)tud_cdc_n_write_available(CDC_UART_ITF);
+        if (max_n > sizeof(out)) {
+            max_n = sizeof(out);
+        }
+        while (n < max_n && uart_is_readable(SP_UART_PORT)) {
+            out[n++] = (uint8_t)uart_getc(SP_UART_PORT);
+        }
+        if (n > 0) {
+            tud_cdc_n_write(CDC_UART_ITF, out, n);
+            tud_cdc_n_write_flush(CDC_UART_ITF);
+        }
+    }
+}
+
 void apply_cs_mode(cs_mode_t mode) {
     cs_mode = mode;
     if (!pin_drivers_enabled) {
@@ -89,7 +144,9 @@ static void usb_wait_for_host(void) {
         tinyusb_poll();
         // Proceed when either CDC interface is opened by a host.
         // This prevents printing startup text before a terminal attaches.
-        if (tud_cdc_n_connected(CDC_SERPROG_ITF) || tud_cdc_n_connected(CDC_CONSOLE_ITF)) {
+        if (tud_cdc_n_connected(CDC_SERPROG_ITF) ||
+            tud_cdc_n_connected(CDC_CONSOLE_ITF) ||
+            tud_cdc_n_connected(CDC_UART_ITF)) {
             return;
         }
     }
@@ -112,6 +169,7 @@ static void init_gpio_and_spi(void) {
     set_flash_active_pin(false);
     set_pin_drivers(true);
     spi_set_speed(SP_DEFAULT_SPI_HZ);
+    uart_bridge_init();
 }
 
 int main(void) {
@@ -138,5 +196,12 @@ int main(void) {
 
         // Console endpoint accepts line-oriented human commands.
         console_poll();
+        uart_bridge_poll();
+    }
+}
+
+void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const *p_line_coding) {
+    if (itf == CDC_UART_ITF) {
+        uart_bridge_set_baudrate(p_line_coding->bit_rate);
     }
 }

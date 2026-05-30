@@ -2,11 +2,12 @@
 
 USB CDC `serprog` firmware for RP2040/RP2350 boards (for example Raspberry Pi Pico), optimized for SPI flash read/write with `flashrom`.
 
-This project turns your board into a USB SPI programmer that `flashrom` can talk to through the `serprog` protocol.
+This project turns your board into a USB SPI programmer that `flashrom` can talk to through the `serprog` protocol, and also exposes a simultaneous UART console bridge.
 
 ## What you get
 
 - USB CDC `serprog` interface (works with `flashrom -p serprog:...`)
+- USB CDC `uart-console` bridge (USB <-> target UART TX/RX)
 - Hardware SPI backend (`spi0`) for good throughput
 - Configurable SPI speed from host (`S_SPI_FREQ`)
 - Optional safe-disconnect control pins:
@@ -63,6 +64,11 @@ Default pinout (`spi0`):
 - `GPIO0` -> flash `DO / MISO`
 - `3V3` (or external regulator output) -> flash `VCC`
 - `GND` -> target `GND`
+
+UART bridge pinout (default, RP2040 Zero friendly):
+
+- `GPIO8` -> target UART `RX` (this board drives TX on GPIO8)
+- `GPIO9` -> target UART `TX` (this board reads RX on GPIO9)
 
 Optional control pins:
 
@@ -128,9 +134,10 @@ flashrom -p serprog:dev=/dev/ttyACM0,spispeed=12M -v image.bin
 
 ### 5. Use diagnostic console (`screen`)
 
-Firmware exposes two USB serial interfaces:
+Firmware exposes three USB serial interfaces:
 
 - `serprog` port: for `flashrom`
+- `uart-console` port: raw UART bridge to `GPIO8/GPIO9`
 - `diag-console` port: interactive diagnostics
 
 #### Linux: enable non-root USB access (`udev`)
@@ -160,7 +167,7 @@ On Linux you can identify ports by symlink name:
 ls -l /dev/serial/by-id/
 ```
 
-Look for entries containing `serprog` and `diag-console`.
+Look for entries containing `serprog`, `uart-console`, and `diag-console`.
 
 Connect to the diagnostic console:
 
@@ -168,7 +175,15 @@ Connect to the diagnostic console:
 screen /dev/ttyACM1 115200
 ```
 
-If `ttyACM1` is not the console, try the other enumerated port.
+If `ttyACM2` is not the diagnostic console, try the other enumerated ports by name.
+
+Connect to UART bridge console:
+
+```bash
+screen /dev/ttyACM1 115200
+```
+
+Use the `uart-console` by-id symlink for stable naming when possible.
 
 Exit screen:
 
@@ -219,6 +234,7 @@ Typical recommended actions include:
 #### Concurrency behavior
 
 - `flashrom` always owns the `serprog` port.
+- UART bridge runs on `uart-console` continuously, including during SPI flashing.
 - diagnostics run on `diag-console`.
 - diagnostics are intended to run when `flashrom` is not actively performing SPI operations.
 
@@ -262,6 +278,8 @@ cmake --build build -j"$(nproc)"
 Useful flags:
 
 - `SP_DEFAULT_SPI_HZ` (default startup SPI speed)
+- `SP_PIN_UART_TX` / `SP_PIN_UART_RX` (UART bridge pins)
+- `SP_DEFAULT_UART_BAUD` (default UART bridge speed; host can change by serial port settings)
 - `SP_PIN_FLASH_ACTIVE_EN=-1` to disable flash-active pin feature
 - `SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH=0|1`
 

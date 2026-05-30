@@ -31,6 +31,7 @@ target_include_directories(rpi-spi PRIVATE
 target_link_libraries(rpi-spi PRIVATE
     pico_stdlib
     hardware_spi
+    hardware_uart
     tinyusb_device
     tinyusb_board
 )

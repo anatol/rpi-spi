@@ -7,23 +7,29 @@
 #define USB_PID 0x000A
 #define USB_BCD 0x0200
 
-// Two CDC functions are exposed:
+// Three CDC functions are exposed:
 // 1) serprog binary transport
-// 2) human-readable diagnostic console
+// 2) raw UART bridge console
+// 3) human-readable diagnostic console
 #define ITF_NUM_CDC_SERPROG 0
 #define ITF_NUM_CDC_SERPROG_DATA 1
-#define ITF_NUM_CDC_CONSOLE 2
-#define ITF_NUM_CDC_CONSOLE_DATA 3
-#define ITF_NUM_TOTAL 4
+#define ITF_NUM_CDC_UART 2
+#define ITF_NUM_CDC_UART_DATA 3
+#define ITF_NUM_CDC_CONSOLE 4
+#define ITF_NUM_CDC_CONSOLE_DATA 5
+#define ITF_NUM_TOTAL 6
 
 #define EPNUM_CDC_SERPROG_NOTIF 0x81
 #define EPNUM_CDC_SERPROG_OUT 0x02
 #define EPNUM_CDC_SERPROG_IN 0x82
-#define EPNUM_CDC_CONSOLE_NOTIF 0x83
-#define EPNUM_CDC_CONSOLE_OUT 0x04
-#define EPNUM_CDC_CONSOLE_IN 0x84
+#define EPNUM_CDC_UART_NOTIF 0x83
+#define EPNUM_CDC_UART_OUT 0x04
+#define EPNUM_CDC_UART_IN 0x84
+#define EPNUM_CDC_CONSOLE_NOTIF 0x85
+#define EPNUM_CDC_CONSOLE_OUT 0x06
+#define EPNUM_CDC_CONSOLE_IN 0x86
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + (2 * TUD_CDC_DESC_LEN))
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + (3 * TUD_CDC_DESC_LEN))
 
 static const tusb_desc_device_t desc_device = {
     .bLength = sizeof(tusb_desc_device_t),
@@ -53,6 +59,9 @@ static const uint8_t desc_configuration[] = {
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_SERPROG, 4, EPNUM_CDC_SERPROG_NOTIF, 8,
                        EPNUM_CDC_SERPROG_OUT, EPNUM_CDC_SERPROG_IN,
                        CFG_TUD_CDC_EP_BUFSIZE),
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_UART, 6, EPNUM_CDC_UART_NOTIF, 8,
+                       EPNUM_CDC_UART_OUT, EPNUM_CDC_UART_IN,
+                       CFG_TUD_CDC_EP_BUFSIZE),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_CONSOLE, 5, EPNUM_CDC_CONSOLE_NOTIF, 8,
                        EPNUM_CDC_CONSOLE_OUT, EPNUM_CDC_CONSOLE_IN,
                        CFG_TUD_CDC_EP_BUFSIZE),
@@ -70,6 +79,7 @@ static const char *string_desc_arr[] = {
     NULL, // iSerialNumber is generated dynamically from unique board ID.
     "serprog",
     "diag-console",
+    "uart-console",
 };
 
 static uint16_t _desc_str[32];

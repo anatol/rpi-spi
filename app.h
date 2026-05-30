@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "hardware/spi.h"
+#include "hardware/uart.h"
 
 #ifndef SP_PIN_MISO
 #define SP_PIN_MISO 0
@@ -26,6 +27,19 @@
 #endif
 #ifndef SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH
 #define SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH 1
+#endif
+
+#ifndef SP_UART_PORT
+#define SP_UART_PORT uart1
+#endif
+#ifndef SP_PIN_UART_TX
+#define SP_PIN_UART_TX 8
+#endif
+#ifndef SP_PIN_UART_RX
+#define SP_PIN_UART_RX 9
+#endif
+#ifndef SP_DEFAULT_UART_BAUD
+#define SP_DEFAULT_UART_BAUD 115200u
 #endif
 
 #ifndef SP_DEFAULT_SPI_HZ
@@ -64,7 +78,8 @@
 #define SERPROG_IFACE_VERSION 0x0001u
 // USB CDC interface index assignments (must match usb_descriptors.c ordering).
 #define CDC_SERPROG_ITF 0u
-#define CDC_CONSOLE_ITF 1u
+#define CDC_UART_ITF 1u
+#define CDC_CONSOLE_ITF 2u
 
 typedef enum {
     // Write then read phases are separated.
@@ -103,3 +118,7 @@ void handle_serprog_command(uint8_t cmd);
 void console_print_ready(void);
 void console_print_prompt(void);
 void console_poll(void);
+void uart_bridge_init(void);
+void uart_bridge_poll(void);
+void uart_bridge_set_baudrate(uint32_t baud);
+uint32_t uart_bridge_get_baudrate(void);
