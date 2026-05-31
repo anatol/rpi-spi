@@ -74,12 +74,17 @@
 #ifndef SP_FW_VERSION
 #define SP_FW_VERSION "dev"
 #endif
+#ifndef SP_ENABLE_DIAG_CONSOLE
+#define SP_ENABLE_DIAG_CONSOLE 0
+#endif
 
 #define SERPROG_IFACE_VERSION 0x0001u
 // USB CDC interface index assignments (must match usb_descriptors.c ordering).
 #define CDC_SERPROG_ITF 0u
 #define CDC_UART_ITF 1u
+#if SP_ENABLE_DIAG_CONSOLE
 #define CDC_CONSOLE_ITF 2u
+#endif
 
 typedef enum {
     // Write then read phases are separated.
@@ -115,9 +120,15 @@ void apply_cs_mode(cs_mode_t mode);
 
 void init_cmdmap(void);
 void handle_serprog_command(uint8_t cmd);
+#if SP_ENABLE_DIAG_CONSOLE
 void console_print_ready(void);
 void console_print_prompt(void);
 void console_poll(void);
+#else
+static inline void console_print_ready(void) {}
+static inline void console_print_prompt(void) {}
+static inline void console_poll(void) {}
+#endif
 void uart_bridge_init(void);
 void uart_bridge_poll(void);
 void uart_bridge_set_baudrate(uint32_t baud);

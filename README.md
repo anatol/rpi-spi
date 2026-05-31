@@ -30,6 +30,12 @@ Run:
 ./build.sh
 ```
 
+Diagnostic console is disabled by default. To enable it for a build:
+
+```bash
+SPI_DEBUG_CONSOLE=1 ./build.sh
+```
+
 This script:
 
 - clones `pico-sdk` into `./pico-sdk` (if missing)
@@ -134,10 +140,13 @@ flashrom -p serprog:dev=/dev/ttyACM0,spispeed=12M -v image.bin
 
 ### 5. Use diagnostic console (`screen`)
 
-Firmware exposes three USB serial interfaces:
+With default build settings, firmware exposes two USB serial interfaces:
 
 - `serprog` port: for `flashrom`
 - `uart-console` port: raw UART bridge to `GPIO8/GPIO9`
+
+When built with `SPI_DEBUG_CONSOLE=1`, a third interface is added:
+
 - `diag-console` port: interactive diagnostics
 
 #### Linux: enable non-root USB access (`udev`)
@@ -167,9 +176,10 @@ On Linux you can identify ports by symlink name:
 ls -l /dev/serial/by-id/
 ```
 
-Look for entries containing `serprog`, `uart-console`, and `diag-console`.
+Look for entries containing `serprog` and `uart-console`.
+If built with `SPI_DEBUG_CONSOLE=1`, you will also see `diag-console`.
 
-Connect to the diagnostic console:
+If built with `SPI_DEBUG_CONSOLE=1`, connect to the diagnostic console:
 
 ```bash
 screen /dev/ttyACM1 115200
@@ -235,7 +245,7 @@ Typical recommended actions include:
 
 - `flashrom` always owns the `serprog` port.
 - UART bridge runs on `uart-console` continuously, including during SPI flashing.
-- diagnostics run on `diag-console`.
+- diagnostics run on `diag-console` when built with `SPI_DEBUG_CONSOLE=1`.
 - diagnostics are intended to run when `flashrom` is not actively performing SPI operations.
 
 ## Speed tuning

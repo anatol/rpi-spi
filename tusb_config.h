@@ -26,7 +26,11 @@
 
 #define CFG_TUD_ENDPOINT0_SIZE 64
 
+#if SP_ENABLE_DIAG_CONSOLE
 #define CFG_TUD_CDC 3
+#else
+#define CFG_TUD_CDC 2
+#endif
 #define CFG_TUD_MSC 0
 #define CFG_TUD_HID 0
 #define CFG_TUD_MIDI 0
@@ -39,3 +43,6 @@
 #define CFG_TUD_CDC_RX_BUFSIZE 1024
 #define CFG_TUD_CDC_TX_BUFSIZE 1024
 #define CFG_TUD_CDC_EP_BUFSIZE 64
+#ifndef SP_ENABLE_DIAG_CONSOLE
+#define SP_ENABLE_DIAG_CONSOLE 0
+#endif

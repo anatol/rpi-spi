@@ -12,6 +12,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 pico_sdk_init()
 
+option(SP_ENABLE_DIAG_CONSOLE "Enable USB diagnostic console interface" OFF)
+
 if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/tinyusb")
     # Prefer project-local TinyUSB checkout when present.
     set(PICO_TINYUSB_PATH "${CMAKE_CURRENT_LIST_DIR}/tinyusb" CACHE PATH "Project-local TinyUSB" FORCE)
@@ -20,9 +22,12 @@ endif()
 add_executable(rpi-spi
     main.c
     serprog.c
-    diag.c
     usb_descriptors.c
 )
+
+if (SP_ENABLE_DIAG_CONSOLE)
+    target_sources(rpi-spi PRIVATE diag.c)
+endif()
 
 target_include_directories(rpi-spi PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
@@ -34,6 +39,10 @@ target_link_libraries(rpi-spi PRIVATE
     hardware_uart
     tinyusb_device
     tinyusb_board
+)
+
+target_compile_definitions(rpi-spi PRIVATE
+    SP_ENABLE_DIAG_CONSOLE=$<BOOL:${SP_ENABLE_DIAG_CONSOLE}>
 )
 
 pico_enable_stdio_uart(rpi-spi 0)

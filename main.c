@@ -145,8 +145,11 @@ static void usb_wait_for_host(void) {
         // Proceed when either CDC interface is opened by a host.
         // This prevents printing startup text before a terminal attaches.
         if (tud_cdc_n_connected(CDC_SERPROG_ITF) ||
-            tud_cdc_n_connected(CDC_CONSOLE_ITF) ||
-            tud_cdc_n_connected(CDC_UART_ITF)) {
+            tud_cdc_n_connected(CDC_UART_ITF)
+#if SP_ENABLE_DIAG_CONSOLE
+            || tud_cdc_n_connected(CDC_CONSOLE_ITF)
+#endif
+        ) {
             return;
         }
     }
