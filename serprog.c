@@ -5,6 +5,7 @@
 #include "app.h"
 #include "pico/stdlib.h"
 #include "serprog.h"
+#include "status_led.h"
 #include "tusb.h"
 
 #define SUPPORTED_BUSTYPE S_BUS_SPI
@@ -51,6 +52,19 @@ static void cdc_write_all_itf(uint8_t itf, const void *data, uint32_t len) {
 }
 
 static void cdc_write_u8_itf(uint8_t itf, uint8_t v) { cdc_write_all_itf(itf, &v, 1); }
+
+static void reject_command(void) {
+    status_led_notify(STATUS_LED_EVENT_ERROR);
+    cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+}
+
+static void write_command_result(bool accepted) {
+    if (accepted) {
+        cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
+    } else {
+        reject_command();
+    }
+}
 
 static bool cdc_read_exact_itf(uint8_t itf, void *dst, uint32_t len) {
     uint8_t *p = (uint8_t *)dst;
@@ -144,18 +158,19 @@ static bool opbuf_append(const uint8_t *data, uint32_t len) {
 static void spi_transfer_write_then_read(uint32_t wlen, uint32_t rlen) {
     if (!pin_drivers_enabled) {
         // Refuse bus activity while external pin drivers are disabled.
-        cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+        reject_command();
         return;
     }
 
     if (wlen > SP_MAX_WRITE_CHUNK || rlen > SP_MAX_READ_CHUNK) {
-        cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+        reject_command();
         // Consume incoming write payload to keep command stream aligned.
         cdc_drain_bytes_itf(CDC_SERPROG_ITF, wlen);
         return;
     }
 
     cdc_read_exact_itf(CDC_SERPROG_ITF, io_buf, wlen);
+    status_led_notify(STATUS_LED_EVENT_SPI_TRAFFIC);
 
     if (cs_mode == CS_MODE_AUTO) {
         // Auto mode wraps each transfer in one CS assertion window.
@@ -256,19 +271,19 @@ void handle_serprog_command(uint8_t cmd) {
         cdc_read_exact_itf(CDC_SERPROG_ITF, &bustype, 1);
         // Valid if non-zero and no unsupported bus bits are requested.
         bool valid = (bustype != 0) && ((bustype & ~SUPPORTED_BUSTYPE) == 0);
-        cdc_write_u8_itf(CDC_SERPROG_ITF, valid ? S_ACK : S_NAK);
+        write_command_result(valid);
         break;
     }
     case S_CMD_S_SPI_FREQ: {
         // Host requests target SPI clock in Hz.
         uint32_t requested = read_le32();
         if (requested == 0) {
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
             break;
         }
         uint32_t actual = spi_set_speed(requested);
         // ACK only if clock setup succeeded; then return chosen real frequency.
-        cdc_write_u8_itf(CDC_SERPROG_ITF, actual ? S_ACK : S_NAK);
+        write_command_result(actual != 0);
         if (actual) {
             write_le32(actual);
         }
@@ -282,6 +297,8 @@ void handle_serprog_command(uint8_t cmd) {
         // Keep bus drivers and optional flash-active GPIO in sync.
         set_pin_drivers(state);
         set_flash_active_pin(state);
+        status_led_notify(state ? STATUS_LED_EVENT_SPI_ENABLED
+                                : STATUS_LED_EVENT_SPI_ISOLATED);
         cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
         break;
     }
@@ -289,7 +306,7 @@ void handle_serprog_command(uint8_t cmd) {
         uint8_t cs_index;
         cdc_read_exact_itf(CDC_SERPROG_ITF, &cs_index, 1);
         // Single-CS design: only CS#0 is supported.
-        cdc_write_u8_itf(CDC_SERPROG_ITF, (cs_index == 0) ? S_ACK : S_NAK);
+        write_command_result(cs_index == 0);
         break;
     }
     case S_CMD_S_SPI_MODE: {
@@ -300,7 +317,7 @@ void handle_serprog_command(uint8_t cmd) {
             spi_mode = (spi_mode_t)mode;
             cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
         } else {
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
         }
         break;
     }
@@ -312,7 +329,7 @@ void handle_serprog_command(uint8_t cmd) {
             apply_cs_mode((cs_mode_t)mode);
             cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
         } else {
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
         }
         break;
     }
@@ -334,7 +351,7 @@ void handle_serprog_command(uint8_t cmd) {
         uint8_t value;
         (void)addr;
         cdc_read_exact_itf(CDC_SERPROG_ITF, &value, 1);
-        cdc_write_u8_itf(CDC_SERPROG_ITF, opbuf_append(&value, 1) ? S_ACK : S_NAK);
+        write_command_result(opbuf_append(&value, 1));
         break;
     }
     case S_CMD_O_WRITEN: {
@@ -345,11 +362,11 @@ void handle_serprog_command(uint8_t cmd) {
         if (len > SP_MAX_WRITE_CHUNK || len > (SP_OPBUF_SIZE - opbuf_len)) {
             // Drain payload even on reject so the next command starts on byte boundary.
             cdc_drain_bytes_itf(CDC_SERPROG_ITF, len);
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
             break;
         }
         cdc_read_exact_itf(CDC_SERPROG_ITF, io_buf, len);
-        cdc_write_u8_itf(CDC_SERPROG_ITF, opbuf_append(io_buf, len) ? S_ACK : S_NAK);
+        write_command_result(opbuf_append(io_buf, len));
         break;
     }
     case S_CMD_O_DELAY: {
@@ -364,13 +381,14 @@ void handle_serprog_command(uint8_t cmd) {
         if (!pin_drivers_enabled) {
             // Drop queued data when bus is unavailable to avoid stale replay.
             opbuf_len = 0;
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
             break;
         }
         if (cs_mode == CS_MODE_AUTO) {
             cs_assert();
         }
         if (opbuf_len > 0) {
+            status_led_notify(STATUS_LED_EVENT_SPI_TRAFFIC);
             spi_write_blocking(SP_SPI_PORT, opbuf, opbuf_len);
         }
         if (cs_mode == CS_MODE_AUTO) {
@@ -384,7 +402,7 @@ void handle_serprog_command(uint8_t cmd) {
         // This command is common in byte-at-a-time flash probing flows.
         if (!pin_drivers_enabled) {
             // Do not touch bus if output drivers are intentionally disabled.
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
             break;
         }
         if (cs_mode == CS_MODE_AUTO) {
@@ -392,6 +410,7 @@ void handle_serprog_command(uint8_t cmd) {
             cs_assert();
         }
         // Read one byte from MISO; io_buf[0] receives sampled value.
+        status_led_notify(STATUS_LED_EVENT_SPI_TRAFFIC);
         spi_read_blocking(SP_SPI_PORT, 0x00, io_buf, 1);
         if (cs_mode == CS_MODE_AUTO) {
             cs_deassert();
@@ -404,12 +423,13 @@ void handle_serprog_command(uint8_t cmd) {
         // Bulk read command with 24-bit length argument.
         uint32_t len = read_le24();
         if (!pin_drivers_enabled || len > SP_MAX_READ_CHUNK) {
-            cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+            reject_command();
             break;
         }
         if (cs_mode == CS_MODE_AUTO) {
             cs_assert();
         }
+        status_led_notify(STATUS_LED_EVENT_SPI_TRAFFIC);
         spi_read_blocking(SP_SPI_PORT, 0x00, io_buf, len);
         if (cs_mode == CS_MODE_AUTO) {
             cs_deassert();
@@ -420,7 +440,7 @@ void handle_serprog_command(uint8_t cmd) {
     }
     default:
         // Unknown or unsupported command.
-        cdc_write_u8_itf(CDC_SERPROG_ITF, S_NAK);
+        reject_command();
         break;
     }
     // Clear ownership marker after each command completion.

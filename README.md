@@ -10,6 +10,7 @@ This project turns your board into a USB SPI programmer that `flashrom` can talk
 - USB CDC `uart-console` bridge (USB <-> target UART TX/RX)
 - Hardware SPI backend (`spi0`) for good throughput
 - Configurable SPI speed from host (`S_SPI_FREQ`)
+- Non-blocking RGB status LED protocol (onboard WS2812 on `GPIO16` by default)
 - Optional safe-disconnect control pins:
   - `FLASH_ACTIVE_EN` for external gating (isolation and/or target power switch)
 - Build helper script that fetches required dependencies
@@ -28,6 +29,13 @@ Run:
 
 ```bash
 ./build.sh
+```
+
+The default build target is `waveshare_rp2040_zero`, including its onboard
+WS2812 on `GPIO16`. Override it for another Pico SDK board when needed:
+
+```bash
+PICO_BOARD=pico ./build.sh
 ```
 
 Diagnostic console is disabled by default. To enable it for a build:
@@ -59,6 +67,32 @@ cp build/rpi-spi.uf2 /media/$USER/RPI-RP2/
 ```
 
 After reboot, the board appears as USB CDC serial devices.
+
+### Status LED protocol
+
+The default LED is the onboard WS2812 on RP2040 Zero-compatible boards (`GPIO16`).
+Animations run from the main polling path and do not intentionally delay SPI or UART traffic.
+
+| Color / pattern | Meaning |
+| --- | --- |
+| White, 3 blinks | Firmware booted and initialized the status LED |
+| Blue, 2 blinks | Host opened the `serprog` USB interface |
+| Yellow, 2 blinks | SPI drivers and optional flash gate were enabled |
+| Magenta, 2 blinks | SPI pins were isolated / tri-stated |
+| Green, 1 blink | SPI transaction traffic |
+| Cyan, 2 blinks | UART traffic in either direction |
+| Red, 3 blinks | Unsupported or rejected serprog operation |
+
+The dim steady idle color summarizes current state: purple means USB is not mounted,
+blue means USB is mounted, cyan means only the UART console is open, green means
+serprog is open with SPI enabled, and magenta means serprog is open with SPI isolated.
+Traffic indications are rate-limited so sustained transfers remain visible without
+continually restarting an animation.
+
+Other useful indications to add later are diagnostic-test progress/result, flash
+erase/write/verify phases (if exposed by a higher-level protocol), target power-good,
+and detected SPI bus contention. Those states are not reliably distinguishable from
+the current low-level serprog byte stream.
 
 ### 3. Wire SPI
 
@@ -292,6 +326,8 @@ Useful flags:
 - `SP_DEFAULT_UART_BAUD` (default UART bridge speed; host can change by serial port settings)
 - `SP_PIN_FLASH_ACTIVE_EN=-1` to disable flash-active pin feature
 - `SP_PIN_FLASH_ACTIVE_EN_ACTIVE_HIGH=0|1`
+- `SP_STATUS_LED_PIN` (default `16`, onboard RP2040 Zero WS2812)
+- `SP_STATUS_LED_ENABLED=0|1` (disable for boards without a WS2812)
 
 ## USB enumeration compatibility option
 

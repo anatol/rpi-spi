@@ -22,8 +22,11 @@ endif()
 add_executable(rpi-spi
     main.c
     serprog.c
+    status_led.c
     usb_descriptors.c
 )
+
+pico_generate_pio_header(rpi-spi ${CMAKE_CURRENT_LIST_DIR}/status_led.pio)
 
 if (SP_ENABLE_DIAG_CONSOLE)
     target_sources(rpi-spi PRIVATE diag.c)
@@ -37,6 +40,7 @@ target_link_libraries(rpi-spi PRIVATE
     pico_stdlib
     hardware_spi
     hardware_uart
+    hardware_pio
     tinyusb_device
     tinyusb_board
 )

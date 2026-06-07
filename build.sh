@@ -17,8 +17,10 @@ git -C pico-sdk submodule update --init
 
 mkdir -p build
 SPI_DEBUG_CONSOLE="${SPI_DEBUG_CONSOLE:-0}"
+PICO_BOARD="${PICO_BOARD:-waveshare_rp2040_zero}"
 cmake -S . -B build \
   -DPICO_SDK_PATH="$ROOT_DIR/pico-sdk" \
   -DPICO_TINYUSB_PATH="$ROOT_DIR/tinyusb" \
+  -DPICO_BOARD="$PICO_BOARD" \
   -DSP_ENABLE_DIAG_CONSOLE="$SPI_DEBUG_CONSOLE"
 cmake --build build -j"$(nproc)"

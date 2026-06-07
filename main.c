@@ -6,6 +6,7 @@
 #include "hardware/gpio.h"
 #include "hardware/uart.h"
 #include "pico/stdlib.h"
+#include "status_led.h"
 #include "tusb.h"
 
 bool pin_drivers_enabled = true;
@@ -17,7 +18,10 @@ uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
 bool serprog_active = false;
 static uint32_t uart_baud_current = SP_DEFAULT_UART_BAUD;
 
-void tinyusb_poll(void) { tud_task(); }
+void tinyusb_poll(void) {
+    tud_task();
+    status_led_task();
+}
 
 void cs_assert(void) { gpio_put(SP_PIN_CS, 0); }
 void cs_deassert(void) { gpio_put(SP_PIN_CS, 1); }
@@ -106,6 +110,7 @@ void uart_bridge_poll(void) {
         uint32_t n = tud_cdc_n_read(CDC_UART_ITF, buf, sizeof(buf));
         if (n > 0) {
             uart_write_blocking(SP_UART_PORT, buf, n);
+            status_led_notify(STATUS_LED_EVENT_UART_TRAFFIC);
         }
     }
 
@@ -122,6 +127,7 @@ void uart_bridge_poll(void) {
         if (n > 0) {
             tud_cdc_n_write(CDC_UART_ITF, out, n);
             tud_cdc_n_write_flush(CDC_UART_ITF);
+            status_led_notify(STATUS_LED_EVENT_UART_TRAFFIC);
         }
     }
 }
@@ -177,6 +183,7 @@ static void init_gpio_and_spi(void) {
 
 int main(void) {
     board_init();
+    status_led_init();
     tusb_init();
 
     init_cmdmap();

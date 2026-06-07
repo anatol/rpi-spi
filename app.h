@@ -77,6 +77,12 @@
 #ifndef SP_ENABLE_DIAG_CONSOLE
 #define SP_ENABLE_DIAG_CONSOLE 0
 #endif
+#ifndef SP_STATUS_LED_ENABLED
+#define SP_STATUS_LED_ENABLED 1
+#endif
+#ifndef SP_STATUS_LED_PIN
+#define SP_STATUS_LED_PIN 16
+#endif
 
 #define SERPROG_IFACE_VERSION 0x0001u
 // USB CDC interface index assignments (must match usb_descriptors.c ordering).
