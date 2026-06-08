@@ -4,6 +4,7 @@
 
 #include "app.h"
 #include "pico/stdlib.h"
+#include "pico/time.h"
 #include "serprog.h"
 #include "status_led.h"
 #include "tusb.h"
@@ -212,6 +213,37 @@ static void spi_transfer_write_then_read(uint32_t wlen, uint32_t rlen) {
     }
 }
 
+static bool flash_read_jedec_id(uint8_t id[3]) {
+    if (!pin_drivers_enabled) {
+        return false;
+    }
+
+    uint8_t cmd = 0x9Fu;
+    cs_assert();
+    spi_write_blocking(SP_SPI_PORT, &cmd, 1);
+    spi_read_blocking(SP_SPI_PORT, 0x00, id, 3);
+    cs_deassert();
+    return true;
+}
+
+static bool flash_jedec_id_valid(const uint8_t id[3]) {
+    bool all_zero = id[0] == 0x00u && id[1] == 0x00u && id[2] == 0x00u;
+    bool all_ff = id[0] == 0xFFu && id[1] == 0xFFu && id[2] == 0xFFu;
+    return !all_zero && !all_ff;
+}
+
+static void wait_flash_ready_after_pin_enable(void) {
+    absolute_time_t deadline = make_timeout_time_ms(500);
+    uint8_t id[3];
+
+    while (absolute_time_diff_us(get_absolute_time(), deadline) > 0) {
+        if (flash_read_jedec_id(id) && flash_jedec_id_valid(id)) {
+            return;
+        }
+        tinyusb_poll();
+    }
+}
+
 void handle_serprog_command(uint8_t cmd) {
     // Signals to other subsystems that serprog currently owns the interface.
     serprog_active = true;
@@ -297,6 +329,10 @@ void handle_serprog_command(uint8_t cmd) {
         // Keep bus drivers and optional flash-active GPIO in sync.
         set_pin_drivers(state);
         set_flash_active_pin(state);
+        if (state) {
+            // Delay the ACK until a newly powered or connected flash responds.
+            wait_flash_ready_after_pin_enable();
+        }
         status_led_notify(state ? STATUS_LED_EVENT_SPI_ENABLED
                                 : STATUS_LED_EVENT_SPI_ISOLATED);
         cdc_write_u8_itf(CDC_SERPROG_ITF, S_ACK);
