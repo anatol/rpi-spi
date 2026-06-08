@@ -374,6 +374,11 @@ Tradeoff:
   - confirm the target uses the selected baud rate and 8-N-1 framing
   - temporarily connect programmer `GPIO8` directly to `GPIO9`; typed data
     should echo back through `uart-console`
+- UART output becomes corrupt when the target resets or switches power:
+  - confirm the programmer and target retain a solid shared ground
+  - avoid routing UART beside relay coils, contacts, or switched power wiring
+  - the firmware biases RX to the idle-high state and drops bytes carrying
+    hardware framing, parity, break, or overrun errors
 - No status LED at boot:
   - the default `waveshare_rp2040_zero` build blinks its GPIO16 WS2812 white
     three times immediately after reset, before a terminal is opened

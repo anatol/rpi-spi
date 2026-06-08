@@ -4,6 +4,7 @@
 #include "app.h"
 #include "bsp/board_api.h"
 #include "hardware/gpio.h"
+#include "hardware/regs/uart.h"
 #include "hardware/uart.h"
 #include "pico/stdlib.h"
 #include "status_led.h"
@@ -17,6 +18,9 @@ uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
 // Diagnostic console checks this to avoid bus ownership races.
 bool serprog_active = false;
 static uint32_t uart_baud_current = SP_DEFAULT_UART_BAUD;
+
+#define UART_DR_ERROR_BITS \
+    (UART_UARTDR_OE_BITS | UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS | UART_UARTDR_FE_BITS)
 
 void tinyusb_poll(void) {
     tud_task();
@@ -93,6 +97,9 @@ void uart_bridge_init(void) {
     }
     gpio_set_function(SP_PIN_UART_TX, GPIO_FUNC_UART);
     gpio_set_function(SP_PIN_UART_RX, GPIO_FUNC_UART);
+    // UART idles high. Keep RX deterministic while the target is reset,
+    // disconnected, or otherwise not actively driving its TX pin.
+    gpio_pull_up(SP_PIN_UART_RX);
     uart_bridge_set_baudrate(SP_DEFAULT_UART_BAUD);
     uart_set_hw_flow(SP_UART_PORT, false, false);
     uart_set_format(SP_UART_PORT, 8, 1, UART_PARITY_NONE);
@@ -122,7 +129,10 @@ void uart_bridge_poll(void) {
             max_n = sizeof(out);
         }
         while (n < max_n && uart_is_readable(SP_UART_PORT)) {
-            out[n++] = (uint8_t)uart_getc(SP_UART_PORT);
+            uint32_t dr = uart_get_hw(SP_UART_PORT)->dr;
+            if ((dr & UART_DR_ERROR_BITS) == 0) {
+                out[n++] = (uint8_t)dr;
+            }
         }
         if (n > 0) {
             tud_cdc_n_write(CDC_UART_ITF, out, n);
