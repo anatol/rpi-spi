@@ -228,6 +228,13 @@ screen /dev/ttyACM1 115200
 ```
 
 Use the `uart-console` by-id symlink for stable naming when possible.
+This is a transparent bridge to the target UART on `GPIO8/GPIO9`. The
+programmer firmware does not print a startup banner on `uart-console`, so it
+stays silent until the target sends data. Messages such as "connected to
+/dev/ttyACM1" come from the host terminal tool, not from this firmware.
+
+Use a build with `SPI_DEBUG_CONSOLE=1` and open `diag-console` for
+firmware-generated status output.
 
 Exit screen:
 
@@ -359,6 +366,20 @@ Tradeoff:
   - confirm board enumerates as CDC serial device
   - confirm `dev=` path or `COM` port is correct
   - verify no other process has the serial port open
+- UART bridge is silent:
+  - `uart-console` carries target UART traffic only; it does not contain
+    programmer logs
+  - cross TX/RX: programmer `GPIO8` to target RX and target TX to programmer
+    `GPIO9`, with a shared ground
+  - confirm the target uses the selected baud rate and 8-N-1 framing
+  - temporarily connect programmer `GPIO8` directly to `GPIO9`; typed data
+    should echo back through `uart-console`
+- No status LED at boot:
+  - the default `waveshare_rp2040_zero` build blinks its GPIO16 WS2812 white
+    three times immediately after reset, before a terminal is opened
+  - confirm `build/rpi-spi.uf2` was flashed and `PICO_BOARD` matches the board
+  - boards without a GPIO16 WS2812 need the correct `SP_STATUS_LED_PIN`, or
+    `SP_STATUS_LED_ENABLED=0`
 - `flashrom` can connect but read/write fails:
   - check wiring order (`CS/SCK/MOSI/MISO`)
   - check target voltage and ground

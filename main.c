@@ -114,7 +114,7 @@ void uart_bridge_poll(void) {
         }
     }
 
-    if (tud_cdc_n_connected(CDC_UART_ITF)) {
+    if (tud_mounted()) {
         uint8_t out[64];
         uint32_t n = 0;
         uint32_t max_n = (uint32_t)tud_cdc_n_write_available(CDC_UART_ITF);
@@ -146,18 +146,8 @@ void apply_cs_mode(cs_mode_t mode) {
 }
 
 static void usb_wait_for_host(void) {
-    while (true) {
+    while (!tud_mounted()) {
         tinyusb_poll();
-        // Proceed when either CDC interface is opened by a host.
-        // This prevents printing startup text before a terminal attaches.
-        if (tud_cdc_n_connected(CDC_SERPROG_ITF) ||
-            tud_cdc_n_connected(CDC_UART_ITF)
-#if SP_ENABLE_DIAG_CONSOLE
-            || tud_cdc_n_connected(CDC_CONSOLE_ITF)
-#endif
-        ) {
-            return;
-        }
     }
 }
 
