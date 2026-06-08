@@ -1,10 +1,19 @@
 #pragma once
 
+#ifndef SP_ENABLE_DIAG_CONSOLE
+#define SP_ENABLE_DIAG_CONSOLE 0
+#endif
+#ifndef SP_ENABLE_UART_CONSOLE
+#define SP_ENABLE_UART_CONSOLE 1
+#endif
+
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "hardware/spi.h"
+#if SP_ENABLE_UART_CONSOLE
 #include "hardware/uart.h"
+#endif
 
 #ifndef SP_PIN_MISO
 #define SP_PIN_MISO 0
@@ -74,9 +83,6 @@
 #ifndef SP_FW_VERSION
 #define SP_FW_VERSION "dev"
 #endif
-#ifndef SP_ENABLE_DIAG_CONSOLE
-#define SP_ENABLE_DIAG_CONSOLE 0
-#endif
 #ifndef SP_STATUS_LED_ENABLED
 #define SP_STATUS_LED_ENABLED 1
 #endif
@@ -87,9 +93,15 @@
 #define SERPROG_IFACE_VERSION 0x0001u
 // USB CDC interface index assignments (must match usb_descriptors.c ordering).
 #define CDC_SERPROG_ITF 0u
+#if SP_ENABLE_UART_CONSOLE
 #define CDC_UART_ITF 1u
+#endif
 #if SP_ENABLE_DIAG_CONSOLE
+#if SP_ENABLE_UART_CONSOLE
 #define CDC_CONSOLE_ITF 2u
+#else
+#define CDC_CONSOLE_ITF 1u
+#endif
 #endif
 
 typedef enum {
@@ -135,7 +147,14 @@ static inline void console_print_ready(void) {}
 static inline void console_print_prompt(void) {}
 static inline void console_poll(void) {}
 #endif
+#if SP_ENABLE_UART_CONSOLE
 void uart_bridge_init(void);
 void uart_bridge_poll(void);
 void uart_bridge_set_baudrate(uint32_t baud);
 uint32_t uart_bridge_get_baudrate(void);
+#else
+static inline void uart_bridge_init(void) {}
+static inline void uart_bridge_poll(void) {}
+static inline void uart_bridge_set_baudrate(uint32_t baud) { (void)baud; }
+static inline uint32_t uart_bridge_get_baudrate(void) { return 0; }
+#endif

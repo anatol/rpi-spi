@@ -4,8 +4,10 @@
 #include "app.h"
 #include "bsp/board_api.h"
 #include "hardware/gpio.h"
+#if SP_ENABLE_UART_CONSOLE
 #include "hardware/regs/uart.h"
 #include "hardware/uart.h"
+#endif
 #include "pico/stdlib.h"
 #include "status_led.h"
 #include "tusb.h"
@@ -17,6 +19,7 @@ uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
 // True while a serprog command is actively executing.
 // Diagnostic console checks this to avoid bus ownership races.
 bool serprog_active = false;
+#if SP_ENABLE_UART_CONSOLE
 static uint32_t uart_baud_current = SP_DEFAULT_UART_BAUD;
 static uint64_t uart_last_flush_us;
 static bool uart_flush_pending;
@@ -24,6 +27,7 @@ static bool uart_flush_pending;
 #define UART_DR_ERROR_BITS \
     (UART_UARTDR_OE_BITS | UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS | UART_UARTDR_FE_BITS)
 #define UART_USB_FLUSH_INTERVAL_US 4000u
+#endif
 
 void tinyusb_poll(void) {
     tud_task();
@@ -84,6 +88,7 @@ uint32_t spi_set_speed(uint32_t req_hz) {
     return actual;
 }
 
+#if SP_ENABLE_UART_CONSOLE
 void uart_bridge_set_baudrate(uint32_t baud) {
     if (baud == 0) {
         return;
@@ -160,6 +165,7 @@ void uart_bridge_poll(void) {
         uart_flush_pending = false;
     }
 }
+#endif
 
 void apply_cs_mode(cs_mode_t mode) {
     cs_mode = mode;
@@ -231,7 +237,12 @@ int main(void) {
 }
 
 void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const *p_line_coding) {
+#if SP_ENABLE_UART_CONSOLE
     if (itf == CDC_UART_ITF) {
         uart_bridge_set_baudrate(p_line_coding->bit_rate);
     }
+#else
+    (void)itf;
+    (void)p_line_coding;
+#endif
 }

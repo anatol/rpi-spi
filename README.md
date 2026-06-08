@@ -44,6 +44,16 @@ Diagnostic console is disabled by default. To enable it for a build:
 SPI_DEBUG_CONSOLE=1 ./build.sh
 ```
 
+UART console is enabled by default. To build without the USB UART bridge and
+its target UART pin initialization:
+
+```bash
+UART_CONSOLE=0 ./build.sh
+```
+
+The corresponding CMake option is `SP_ENABLE_UART_CONSOLE`, which defaults to
+`ON`.
+
 This script:
 
 - clones `pico-sdk` into `./pico-sdk` (if missing)
@@ -71,7 +81,8 @@ After reboot, the board appears as USB CDC serial devices.
 ### Status LED protocol
 
 The default LED is the onboard WS2812 on RP2040 Zero-compatible boards (`GPIO16`).
-Animations run from the main polling path and do not intentionally delay SPI or UART traffic.
+Animations run from the main polling path and do not intentionally delay SPI or
+enabled UART traffic.
 
 | Color / pattern | Meaning |
 | --- | --- |
@@ -84,8 +95,8 @@ Animations run from the main polling path and do not intentionally delay SPI or 
 | Red, 3 blinks | Unsupported or rejected serprog operation |
 
 The dim steady idle color summarizes current state: purple means USB is not mounted,
-blue means USB is mounted, cyan means only the UART console is open, green means
-serprog is open with SPI enabled, and magenta means serprog is open with SPI isolated.
+blue means USB is mounted, cyan means only the enabled UART console is open, green
+means serprog is open with SPI enabled, and magenta means serprog is open with SPI isolated.
 Traffic indications are rate-limited so sustained transfers remain visible without
 continually restarting an animation.
 
@@ -179,6 +190,9 @@ With default build settings, firmware exposes two USB serial interfaces:
 - `serprog` port: for `flashrom`
 - `uart-console` port: raw UART bridge to `GPIO8/GPIO9`
 
+When built with `UART_CONSOLE=0`, only the `serprog` interface is exposed
+by default and the target UART pins are not initialized.
+
 When built with `SPI_DEBUG_CONSOLE=1`, a third interface is added:
 
 - `diag-console` port: interactive diagnostics
@@ -210,7 +224,8 @@ On Linux you can identify ports by symlink name:
 ls -l /dev/serial/by-id/
 ```
 
-Look for entries containing `serprog` and `uart-console`.
+With the default UART-enabled build, look for entries containing `serprog` and
+`uart-console`.
 If built with `SPI_DEBUG_CONSOLE=1`, you will also see `diag-console`.
 
 If built with `SPI_DEBUG_CONSOLE=1`, connect to the diagnostic console:
@@ -285,7 +300,8 @@ Typical recommended actions include:
 #### Concurrency behavior
 
 - `flashrom` always owns the `serprog` port.
-- UART bridge runs on `uart-console` continuously, including during SPI flashing.
+- When enabled, the UART bridge runs on `uart-console` continuously, including
+  during SPI flashing.
 - diagnostics run on `diag-console` when built with `SPI_DEBUG_CONSOLE=1`.
 - diagnostics are intended to run when `flashrom` is not actively performing SPI operations.
 
@@ -328,6 +344,7 @@ cmake --build build -j"$(nproc)"
 
 Useful flags:
 
+- `SP_ENABLE_UART_CONSOLE=ON|OFF` (CMake option, default `ON`)
 - `SP_DEFAULT_SPI_HZ` (default startup SPI speed)
 - `SP_PIN_UART_TX` / `SP_PIN_UART_RX` (UART bridge pins)
 - `SP_DEFAULT_UART_BAUD` (default UART bridge speed; host can change by serial port settings)
@@ -367,6 +384,8 @@ Tradeoff:
   - confirm `dev=` path or `COM` port is correct
   - verify no other process has the serial port open
 - UART bridge is silent:
+  - confirm the firmware was built with UART support (the default); builds made
+    with `UART_CONSOLE=0` do not expose `uart-console`
   - `uart-console` carries target UART traffic only; it does not contain
     programmer logs
   - cross TX/RX: programmer `GPIO8` to target RX and target TX to programmer

@@ -55,9 +55,11 @@ static uint32_t idle_color(void) {
     if (tud_cdc_n_connected(CDC_SERPROG_ITF)) {
         return pin_drivers_enabled ? RGB(0, 10, 0) : RGB(10, 3, 8);
     }
+#if SP_ENABLE_UART_CONSOLE
     if (tud_cdc_n_connected(CDC_UART_ITF)) {
         return RGB(0, 5, 8);
     }
+#endif
     if (tud_mounted()) {
         return RGB(0, 0, 8);
     }

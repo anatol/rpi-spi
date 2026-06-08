@@ -412,12 +412,16 @@ static void console_print_info(void) {
     console_printf("default_uart_baud=%u\r\n", SP_DEFAULT_UART_BAUD);
     console_printf("spi_pins cs=%d sck=%d mosi=%d miso=%d\r\n", SP_PIN_CS, SP_PIN_SCK, SP_PIN_MOSI,
                    SP_PIN_MISO);
+#if SP_ENABLE_UART_CONSOLE
     if (pin_is_valid(SP_PIN_UART_TX) && pin_is_valid(SP_PIN_UART_RX) &&
         SP_PIN_UART_TX != SP_PIN_UART_RX) {
         console_printf("uart_pins tx=%d rx=%d\r\n", SP_PIN_UART_TX, SP_PIN_UART_RX);
     } else {
         console_printf("uart_pins=disabled\r\n");
     }
+#else
+    console_printf("uart_console=disabled\r\n");
+#endif
     if (pin_is_valid(SP_PIN_FLASH_ACTIVE_EN)) {
         console_printf("flash_active_en_pin=%d\r\n", SP_PIN_FLASH_ACTIVE_EN);
         console_printf("flash_active_en_active=%s\r\n",
@@ -431,7 +435,11 @@ static void console_print_status(void) {
     console_printf("serprog_active=%s\r\n", serprog_active ? "yes" : "no");
     console_printf("pin_drivers_enabled=%s\r\n", pin_drivers_enabled ? "yes" : "no");
     console_printf("spi_hz=%lu\r\n", (unsigned long)spi_hz_current);
+#if SP_ENABLE_UART_CONSOLE
     console_printf("uart_baud=%lu\r\n", (unsigned long)uart_bridge_get_baudrate());
+#else
+    console_printf("uart_console=disabled\r\n");
+#endif
     console_printf("spi_mode=%s\r\n", spi_mode == SPI_MODE_FULL_DUPLEX ? "full" : "half");
     console_printf("cs_mode=%s\r\n",
                    cs_mode == CS_MODE_AUTO

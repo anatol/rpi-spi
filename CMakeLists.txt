@@ -13,6 +13,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 pico_sdk_init()
 
 option(SP_ENABLE_DIAG_CONSOLE "Enable USB diagnostic console interface" OFF)
+option(SP_ENABLE_UART_CONSOLE "Enable USB UART console bridge" ON)
 
 if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/tinyusb")
     # Prefer project-local TinyUSB checkout when present.
@@ -39,14 +40,18 @@ target_include_directories(rpi-spi PRIVATE
 target_link_libraries(rpi-spi PRIVATE
     pico_stdlib
     hardware_spi
-    hardware_uart
     hardware_pio
     tinyusb_device
     tinyusb_board
 )
 
+if (SP_ENABLE_UART_CONSOLE)
+    target_link_libraries(rpi-spi PRIVATE hardware_uart)
+endif()
+
 target_compile_definitions(rpi-spi PRIVATE
     SP_ENABLE_DIAG_CONSOLE=$<BOOL:${SP_ENABLE_DIAG_CONSOLE}>
+    SP_ENABLE_UART_CONSOLE=$<BOOL:${SP_ENABLE_UART_CONSOLE}>
 )
 
 pico_enable_stdio_uart(rpi-spi 0)
