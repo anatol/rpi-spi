@@ -27,7 +27,8 @@ enum {
     LED_PRIORITY_BOOT = 5,
 };
 
-#define RGB(r, g, b) (((uint32_t)(r) << 16u) | ((uint32_t)(g) << 8u) | (uint32_t)(b))
+// WS2812 transmits color channels in GRB order.
+#define RGB(r, g, b) (((uint32_t)(g) << 16u) | ((uint32_t)(r) << 8u) | (uint32_t)(b))
 
 static PIO led_pio;
 static uint led_sm;

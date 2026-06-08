@@ -18,9 +18,12 @@ uint32_t spi_hz_current = SP_DEFAULT_SPI_HZ;
 // Diagnostic console checks this to avoid bus ownership races.
 bool serprog_active = false;
 static uint32_t uart_baud_current = SP_DEFAULT_UART_BAUD;
+static uint64_t uart_last_flush_us;
+static bool uart_flush_pending;
 
 #define UART_DR_ERROR_BITS \
     (UART_UARTDR_OE_BITS | UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS | UART_UARTDR_FE_BITS)
+#define UART_USB_FLUSH_INTERVAL_US 4000u
 
 void tinyusb_poll(void) {
     tud_task();
@@ -107,8 +110,15 @@ void uart_bridge_init(void) {
 }
 
 void uart_bridge_poll(void) {
+    bool uart_packet_full = false;
+
     if (!pin_is_valid(SP_PIN_UART_TX) || !pin_is_valid(SP_PIN_UART_RX) ||
         SP_PIN_UART_TX == SP_PIN_UART_RX) {
+        return;
+    }
+
+    // Keep flashrom's latency-sensitive command stream ahead of console traffic.
+    if (tud_cdc_n_available(CDC_SERPROG_ITF) > 0) {
         return;
     }
 
@@ -136,9 +146,18 @@ void uart_bridge_poll(void) {
         }
         if (n > 0) {
             tud_cdc_n_write(CDC_UART_ITF, out, n);
-            tud_cdc_n_write_flush(CDC_UART_ITF);
+            uart_flush_pending = true;
+            uart_packet_full = (n == sizeof(out));
             status_led_notify(STATUS_LED_EVENT_UART_TRAFFIC);
         }
+    }
+
+    uint64_t now = time_us_64();
+    if (uart_flush_pending &&
+        (uart_packet_full || now - uart_last_flush_us >= UART_USB_FLUSH_INTERVAL_US)) {
+        tud_cdc_n_write_flush(CDC_UART_ITF);
+        uart_last_flush_us = now;
+        uart_flush_pending = false;
     }
 }
 
@@ -201,6 +220,7 @@ int main(void) {
             uint8_t cmd;
             if (tud_cdc_n_read(CDC_SERPROG_ITF, &cmd, 1) == 1) {
                 handle_serprog_command(cmd);
+                continue;
             }
         }
 
